@@ -1,0 +1,4 @@
+/.idea/
+/target/
+voxelgame.iml
+**/*.rs.bk
