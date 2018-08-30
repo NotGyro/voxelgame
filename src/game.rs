@@ -11,7 +11,6 @@ use winit::{Window, WindowBuilder};
 use ::renderer::{Renderer, RenderQueueMeshEntry};
 use ::input::InputState;
 use ::world::Dimension;
-use ::world::generators::{WorldGenerator, PerlinGenerator};
 use ::registry::DimensionRegistry;
 use ::player::Player;
 
@@ -43,15 +42,7 @@ impl Game {
         player.pitch = -30.0;
 
         let mut dimension_registry = DimensionRegistry::new();
-        let mut dimension = Dimension::new();
-        let gen = PerlinGenerator::new();
-        for x in 0..8 {
-            for z in 0..8 {
-                let mut chunk = gen.generate((x, 0, z), 0);
-                chunk.generate_mesh(renderer.device.clone());
-                dimension.chunks.insert((x, 0, z), chunk);
-            }
-        }
+        let dimension = Dimension::new();
         dimension_registry.dimensions.insert(0, dimension);
 
         Game {
@@ -134,7 +125,7 @@ impl Game {
         self.render_queue.clear();
         for (_, mut chunk) in self.dimension_registry.get(0).unwrap().chunks.iter_mut() {
             if chunk.mesh_dirty {
-                chunk.generate_mesh(self.renderer.device.clone());
+                chunk.generate_mesh(&self.renderer);
             }
             chunk.mesh.queue_draw(&mut self.render_queue);
         }

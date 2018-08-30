@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use std::collections::HashSet;
 
-use vulkano::device::Device;
 use cgmath::Point3;
 
 use ::geometry::{Mesh, VertexPositionNormalUVColor, VertexGroup, Material};
 use ::util::Transform;
+use ::renderer::Renderer;
 
 
 /// Struct representing blocks in a 16x16x16 chunk.
@@ -43,13 +43,19 @@ impl Chunk {
     pub fn xyz_to_i(x: i32, y: i32, z: i32) -> usize { ((x * 16*16) + (y * 16) + z) as usize }
 
 
+    #[allow(dead_code)]
     /// Sets a block at the given index.
     pub fn set_at(&mut self, i: usize, id: u8) {
         self.ids[i] = id;
     }
 
 
-    pub fn generate_mesh(&mut self, device: Arc<Device>) {
+    pub fn replace_data(&mut self, data: &[u8; 16*16*16]) {
+        self.ids = *data;
+    }
+
+
+    pub fn generate_mesh(&mut self, renderer: &Renderer) {
         // get all unique ids
         let mut unique_ids = HashSet::new() as HashSet<u8>;
         for i in 0..(16*16*16) {
@@ -59,22 +65,27 @@ impl Chunk {
 
         let mut mesh = Mesh::new();
 
-        for id in unique_ids.iter().clone() {
+        for id in unique_ids.iter() {
             let mut vertices = Vec::new() as Vec<VertexPositionNormalUVColor>;
+            vertices.reserve(24 * 16 * 16 * 16);
             let mut indices = Vec::new() as Vec<u32>;
+            indices.reserve(8 * 16 * 16 * 16);
             let mut index_offset = 0;
 
-            for i in 0..(16*16*16) {
-                if self.ids[i] == *id {
-                    let (x, y, z) = Chunk::i_to_xyz(i);
-                    let mut verts = ::util::cube::generate_unit_cube(x, y, z).to_vec();
-                    vertices.append(&mut verts);
-                    indices.append(&mut ::util::cube::generate_indices_with_offset(index_offset).to_vec());
-                    index_offset += 1;
+            for x in 0..16 {
+                for y in 0..16 {
+                    for z in 0..16 {
+                        if self.ids[Chunk::xyz_to_i(x, y, z)] == *id {
+                            let mut verts = ::util::cube::generate_unit_cube(x, y, z).to_vec();
+                            vertices.append(&mut verts);
+                            indices.append(&mut ::util::cube::generate_indices_with_offset(index_offset).to_vec());
+                            index_offset += 1;
+                        }
+                    }
                 }
             }
 
-            mesh.vertex_groups.push(Arc::new(VertexGroup::new(vertices, indices, *id, device.clone())));
+            mesh.vertex_groups.push(Arc::new(VertexGroup::new(vertices, indices, *id, renderer)));
         }
         mesh.materials.push(Material { albedo_map_name: String::from("") });
         mesh.materials.push(Material { albedo_map_name: String::from("stone") });

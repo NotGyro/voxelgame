@@ -1,18 +1,24 @@
 extern crate cgmath;
+extern crate fine_grained;
+extern crate fnv;
 extern crate image;
-extern crate winit;
-extern crate rand;
 extern crate noise;
+extern crate rand;
+extern crate smallvec;
+extern crate winit;
 
 #[macro_use]
 extern crate vulkano;
 #[macro_use]
 extern crate vulkano_shader_derive;
 
+mod allocator;
+mod buffer;
 mod game;
 mod geometry;
 mod input;
 mod player;
+mod pool;
 mod registry;
 mod renderer;
 mod renderpass;

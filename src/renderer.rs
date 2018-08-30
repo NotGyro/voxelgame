@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use cgmath::{EuclideanSpace, Matrix4, Vector4};
 
-use vulkano::buffer::cpu_access::CpuAccessibleBuffer;
+use buffer::CpuAccessibleBufferAutoPool;
 use vulkano::buffer::cpu_pool::CpuBufferPool;
+use vulkano::buffer::{BufferUsage};
 use vulkano::device::{Device, DeviceExtensions, Queue};
 use vulkano::format::D32Sfloat;
 use vulkano::framebuffer::{FramebufferAbstract, Framebuffer, Subpass, RenderPass, RenderPassDesc};
@@ -16,13 +17,13 @@ use vulkano::swapchain::{Swapchain, Surface, SwapchainCreationError};
 use vulkano::sync::{GpuFuture};
 use winit::Window;
 
-use ::util::{Camera, Transform};
-use ::geometry::{VertexPositionNormalUVColor, VertexPositionColorAlpha, VertexGroup, Material};
-use ::renderpass::{RenderPassClearedColorWithDepth, RenderPassUnclearedColorWithDepth};
-use ::registry::TextureRegistry;
-
-use ::shader::default as DefaultShaders;
-use ::shader::lines as LinesShaders;
+use util::{Camera, Transform};
+use geometry::{VertexPositionNormalUVColor, VertexPositionColorAlpha, VertexGroup, Material};
+use renderpass::{RenderPassClearedColorWithDepth, RenderPassUnclearedColorWithDepth};
+use registry::TextureRegistry;
+use shader::default as DefaultShaders;
+use shader::lines as LinesShaders;
+use pool::AutoMemoryPool;
 
 
 static VULKAN_CORRECT_CLIP: Matrix4<f32> = Matrix4 {
@@ -35,8 +36,8 @@ static VULKAN_CORRECT_CLIP: Matrix4<f32> = Matrix4 {
 
 // temp struct for debug drawing lines
 struct LineData {
-    pub vertex_buffer: Arc<CpuAccessibleBuffer<[VertexPositionColorAlpha]>>,
-    pub index_buffer: Arc<CpuAccessibleBuffer<[u32]>>,
+    pub vertex_buffer: Arc<CpuAccessibleBufferAutoPool<[VertexPositionColorAlpha]>>,
+    pub index_buffer: Arc<CpuAccessibleBufferAutoPool<[u32]>>,
 }
 
 
@@ -49,6 +50,7 @@ pub struct RenderQueueMeshEntry {
 
 pub struct Renderer {
     pub device: Arc<Device>,
+    pub memory_pool: AutoMemoryPool,
     queue: Arc<Queue>,
     surface: Arc<Surface<Window>>,
     renderpass: Arc<RenderPass<RenderPassClearedColorWithDepth>>,
@@ -61,8 +63,8 @@ pub struct Renderer {
     pipeline_lines: Arc<GraphicsPipelineAbstract + Send + Sync>,
     sampler: Arc<Sampler>,
     depth_buffer: Arc<AttachmentImage<D32Sfloat>>,
-    uniform_buffer: CpuBufferPool<DefaultShaders::vertex::ty::Data>,
-    uniform_buffer_lines: CpuBufferPool<LinesShaders::vertex::ty::Data>,
+    uniform_buffer_pool: CpuBufferPool<DefaultShaders::vertex::ty::Data>,
+    uniform_buffer_pool_lines: CpuBufferPool<LinesShaders::vertex::ty::Data>,
     recreate_swapchain: bool,
     tex_registry: TextureRegistry,
     temp_line_data: LineData
@@ -103,11 +105,8 @@ impl Renderer {
                            ::vulkano::swapchain::PresentMode::Fifo, true, None).expect("failed to create swapchain")
         };
 
-        let uniform_buffer = ::vulkano::buffer::cpu_pool::CpuBufferPool::<DefaultShaders::vertex::ty::Data>
-        ::new(device.clone(), ::vulkano::buffer::BufferUsage::all());
-
-        let uniform_buffer_lines = ::vulkano::buffer::cpu_pool::CpuBufferPool::<LinesShaders::vertex::ty::Data>
-        ::new(device.clone(), ::vulkano::buffer::BufferUsage::all());
+        let uniform_buffer_pool = CpuBufferPool::<DefaultShaders::vertex::ty::Data>::new(device.clone(), BufferUsage::all());
+        let uniform_buffer_pool_lines = CpuBufferPool::<LinesShaders::vertex::ty::Data>::new(device.clone(), BufferUsage::all());
 
         let depth_buffer = ::vulkano::image::attachment::AttachmentImage::transient(device.clone(), dimensions, D32Sfloat).unwrap();
 
@@ -160,6 +159,8 @@ impl Renderer {
             .build(device.clone())
             .unwrap());
 
+        let memory_pool = AutoMemoryPool::new(device.clone());
+
         let mut temp_line_verts = Vec::new();
         let mut temp_line_idxs = Vec::new();
         let mut line_idx_offset = 0;
@@ -172,12 +173,13 @@ impl Renderer {
         }
 
         let temp_line_data = LineData {
-            vertex_buffer: CpuAccessibleBuffer::<[VertexPositionColorAlpha]>::from_iter(device.clone(), ::vulkano::buffer::BufferUsage::all(), temp_line_verts.iter().cloned()).expect("failed to create buffer"),
-            index_buffer: CpuAccessibleBuffer::<[u32]>::from_iter(device.clone(), ::vulkano::buffer::BufferUsage::all(), temp_line_idxs.iter().cloned()).expect("failed to create buffer"),
+            vertex_buffer: CpuAccessibleBufferAutoPool::<[VertexPositionColorAlpha]>::from_iter(device.clone(), memory_pool.clone(), ::vulkano::buffer::BufferUsage::all(), temp_line_verts.iter().cloned()).expect("failed to create buffer"),
+            index_buffer: CpuAccessibleBufferAutoPool::<[u32]>::from_iter(device.clone(), memory_pool.clone(), ::vulkano::buffer::BufferUsage::all(), temp_line_idxs.iter().cloned()).expect("failed to create buffer"),
         };
 
         Renderer {
             device,
+            memory_pool,
             queue,
             surface,
             renderpass,
@@ -190,8 +192,8 @@ impl Renderer {
             pipeline_lines,
             sampler,
             depth_buffer,
-            uniform_buffer,
-            uniform_buffer_lines,
+            uniform_buffer_pool,
+            uniform_buffer_pool_lines,
             recreate_swapchain: false,
             tex_registry: registry,
             temp_line_data
@@ -258,7 +260,7 @@ impl Renderer {
                 proj : (VULKAN_CORRECT_CLIP * ::cgmath::perspective(camera.fov, { dimensions[0] as f32 / dimensions[1] as f32 }, 0.1, 100.0)).into(),
             };
 
-            let subbuffer = self.uniform_buffer.next(uniform_data).unwrap();
+            let subbuffer = self.uniform_buffer_pool.next(uniform_data).unwrap();
             descriptor_sets.push(Arc::new(::vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(self.pipeline.clone(), 0)
                 .add_sampled_image(self.tex_registry.get(&entry.material.albedo_map_name).unwrap().clone(), self.sampler.clone()).unwrap()
                 .add_buffer(subbuffer).unwrap()
@@ -268,7 +270,7 @@ impl Renderer {
 
         let line_descriptor_set;
         {
-            let subbuffer = self.uniform_buffer_lines.next(LinesShaders::vertex::ty::Data {
+            let subbuffer = self.uniform_buffer_pool_lines.next(LinesShaders::vertex::ty::Data {
                 world : Matrix4::from_scale(1.0).into(),
                 view : view_mat.into(),
                 proj : (VULKAN_CORRECT_CLIP * ::cgmath::perspective(camera.fov, { dimensions[0] as f32 / dimensions[1] as f32 }, 0.1, 100.0)).into(),
