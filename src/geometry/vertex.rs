@@ -14,3 +14,18 @@ pub struct VertexPositionColorAlpha {
     pub color:    [f32; 4]
 }
 impl_vertex!(VertexPositionColorAlpha, position, color);
+
+
+#[derive(Debug, Clone)]
+pub struct VertexPosition {
+    pub position: [f32; 3]
+}
+impl_vertex!(VertexPosition, position);
+
+
+#[derive(Debug, Clone)]
+pub struct VertexPositionUV {
+    pub position: [f32; 3],
+    pub uv:       [f32; 2]
+}
+impl_vertex!(VertexPositionUV, position, uv);

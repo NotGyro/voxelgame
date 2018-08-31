@@ -15,7 +15,7 @@ use util::{Camera, Transform};
 use geometry::{VertexGroup, Material};
 use registry::TextureRegistry;
 use pool::AutoMemoryPool;
-use pipeline::{RenderPipeline, ChunkRenderPipeline, LinesRenderPipeline};
+use pipeline::{ChunkRenderPipeline, LinesRenderPipeline, SkyboxRenderPipeline};
 
 
 pub static VULKAN_CORRECT_CLIP: Matrix4<f32> = Matrix4 {
@@ -43,6 +43,7 @@ pub struct Renderer {
     depth_buffer: Arc<AttachmentImage<D32Sfloat>>,
     recreate_swapchain: bool,
     tex_registry: TextureRegistry,
+    skybox_pipeline: SkyboxRenderPipeline,
     chunk_pipeline: ChunkRenderPipeline,
     lines_pipeline: LinesRenderPipeline,
     pub chunk_mesh_queue: Vec<ChunkRenderQueueEntry>,
@@ -97,8 +98,9 @@ impl Renderer {
 
         let memory_pool = AutoMemoryPool::new(device.clone());
 
-        let chunk_pipeline = ChunkRenderPipeline::new(&swapchain, device.clone());
-        let lines_pipeline = LinesRenderPipeline::new(&swapchain, device.clone(), &memory_pool);
+        let skybox_pipeline = SkyboxRenderPipeline::new(&swapchain, &device, &queue, &memory_pool);
+        let chunk_pipeline = ChunkRenderPipeline::new(&swapchain, &device);
+        let lines_pipeline = LinesRenderPipeline::new(&swapchain, &device, &memory_pool);
 
         Renderer {
             device,
@@ -110,6 +112,7 @@ impl Renderer {
             depth_buffer,
             recreate_swapchain: false,
             tex_registry: registry,
+            skybox_pipeline,
             chunk_pipeline,
             lines_pipeline,
             chunk_mesh_queue: Vec::new()
@@ -142,10 +145,10 @@ impl Renderer {
 
             ::std::mem::replace(&mut self.swapchain, new_swapchain);
             ::std::mem::replace(&mut self.images, new_images);
-
             let new_depth_buffer = AttachmentImage::transient(self.device.clone(), dimensions, D32Sfloat).unwrap();
             ::std::mem::replace(&mut self.depth_buffer, new_depth_buffer);
 
+            self.skybox_pipeline.remove_framebuffers();
             self.chunk_pipeline.remove_framebuffers();
             self.lines_pipeline.remove_framebuffers();
 
@@ -153,6 +156,9 @@ impl Renderer {
         }
 
         // TODO: is this necessary here? or just recreate frambuffers above?
+        if self.skybox_pipeline.framebuffers.is_none() {
+            self.skybox_pipeline.recreate_framebuffers(&self.images, &self.depth_buffer);
+        }
         if self.chunk_pipeline.framebuffers.is_none() {
             self.chunk_pipeline.recreate_framebuffers(&self.images, &self.depth_buffer);
         }
@@ -170,10 +176,13 @@ impl Renderer {
             Err(err) => panic!("{:?}", err)
         };
 
-        let cb = self.chunk_pipeline.build_command_buffer(image_num, &self.queue, dimensions, &transform, view_mat, proj_mat, &self.tex_registry, &self.chunk_mesh_queue);
+        let skybox_cb = self.skybox_pipeline.build_command_buffer(image_num, &self.queue, dimensions, view_mat, proj_mat);
+        let chunks_cb = self.chunk_pipeline.build_command_buffer(image_num, &self.queue, dimensions, &transform, view_mat, proj_mat, &self.tex_registry, &self.chunk_mesh_queue);
         let lines_cb = self.lines_pipeline.build_command_buffer(image_num, &self.queue, dimensions, view_mat, proj_mat);
 
-        let future = future.then_execute(self.queue.clone(), cb).unwrap()
+        let future = future
+            .then_execute(self.queue.clone(), skybox_cb).unwrap()
+            .then_execute(self.queue.clone(), chunks_cb).unwrap()
             .then_execute(self.queue.clone(), lines_cb).unwrap()
             .then_swapchain_present(self.queue.clone(), self.swapchain.clone(), image_num)
             .then_signal_fence_and_flush();

@@ -85,7 +85,7 @@ unsafe impl RenderPassDesc for RenderPassUnclearedColorWithDepth {
                 format: Format::D32Sfloat,
                 samples: 1,
                 load: LoadOp::Load,
-                store: StoreOp::DontCare,
+                store: StoreOp::Store,
                 stencil_load: LoadOp::DontCare,
                 stencil_store: StoreOp::DontCare,
                 initial_layout: ImageLayout::Undefined,

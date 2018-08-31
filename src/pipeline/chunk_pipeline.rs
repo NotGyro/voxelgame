@@ -3,45 +3,44 @@ use std::sync::Arc;
 use cgmath::Matrix4;
 use vulkano::buffer::BufferUsage;
 use vulkano::buffer::cpu_pool::CpuBufferPool;
-use vulkano::device::{Device, Queue};
-use vulkano::framebuffer::{FramebufferAbstract, Framebuffer, RenderPass, RenderPassDesc, Subpass};
-use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
-use vulkano::swapchain::Swapchain;
-use vulkano::image::swapchain::SwapchainImage;
-use winit::Window;
-use vulkano::format::D32Sfloat;
-use vulkano::image::attachment::AttachmentImage;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, AutoCommandBuffer, DynamicState};
+use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
+use vulkano::device::{Device, Queue};
+use vulkano::format::D32Sfloat;
+use vulkano::framebuffer::{FramebufferAbstract, Framebuffer, RenderPass, RenderPassDesc, Subpass};
+use vulkano::image::attachment::AttachmentImage;
+use vulkano::image::swapchain::SwapchainImage;
 use vulkano::pipeline::viewport::Viewport;
+use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::sampler::{Sampler, Filter, SamplerAddressMode, MipmapMode};
+use vulkano::swapchain::Swapchain;
+use winit::Window;
 
 use geometry::VertexPositionNormalUVColor;
-use renderpass::RenderPassClearedColorWithDepth;
-use renderer::ChunkRenderQueueEntry;
-use util::Transform;
-
-use super::RenderPipeline;
-use shader::default as DefaultShaders;
 use registry::TextureRegistry;
+use renderer::ChunkRenderQueueEntry;
+use renderpass::RenderPassUnclearedColorWithDepth;
+use shader::chunks as ChunksShaders;
+use util::Transform;
 
 
 pub struct ChunkRenderPipeline {
     device: Arc<Device>,
     vulkan_pipeline: Arc<GraphicsPipelineAbstract + Send + Sync>,
     pub framebuffers: Option<Vec<Arc<FramebufferAbstract + Send + Sync>>>,
-    renderpass: Arc<RenderPass<RenderPassClearedColorWithDepth>>,
-    uniform_buffer_pool: CpuBufferPool<DefaultShaders::vertex::ty::Data>,
+    renderpass: Arc<RenderPass<RenderPassUnclearedColorWithDepth>>,
+    uniform_buffer_pool: CpuBufferPool<ChunksShaders::vertex::ty::Data>,
     sampler: Arc<Sampler>,
 }
 
 
 impl ChunkRenderPipeline {
-    pub fn new(swapchain: &Swapchain<Window>, device: Arc<Device>) -> ChunkRenderPipeline {
-        let vs = DefaultShaders::vertex::Shader::load(device.clone()).expect("failed to create shader module");
-        let fs = DefaultShaders::fragment::Shader::load(device.clone()).expect("failed to create shader module");
+    pub fn new(swapchain: &Swapchain<Window>, device: &Arc<Device>) -> ChunkRenderPipeline {
+        let vs = ChunksShaders::vertex::Shader::load(device.clone()).expect("failed to create shader module");
+        let fs = ChunksShaders::fragment::Shader::load(device.clone()).expect("failed to create shader module");
 
         let renderpass = Arc::new(
-            RenderPassClearedColorWithDepth { color_format: swapchain.format() }
+            RenderPassUnclearedColorWithDepth { color_format: swapchain.format() }
                 .build_render_pass(device.clone())
                 .unwrap()
         );
@@ -64,7 +63,7 @@ impl ChunkRenderPipeline {
             vulkan_pipeline: pipeline,
             framebuffers: None,
             renderpass,
-            uniform_buffer_pool: CpuBufferPool::<DefaultShaders::vertex::ty::Data>::new(device.clone(), BufferUsage::all()),
+            uniform_buffer_pool: CpuBufferPool::<ChunksShaders::vertex::ty::Data>::new(device.clone(), BufferUsage::all()),
             sampler: Sampler::new(device.clone(), Filter::Nearest, Filter::Nearest, MipmapMode::Nearest,
                                   SamplerAddressMode::Repeat, SamplerAddressMode::Repeat, SamplerAddressMode::Repeat,
                                   0.0, 4.0, 0.0, 0.0).unwrap(),
@@ -75,7 +74,7 @@ impl ChunkRenderPipeline {
     pub fn build_command_buffer(&self, image_num: usize, queue: &Arc<Queue>, dimensions: [u32; 2], transform: &Transform, view_mat: Matrix4<f32>, proj_mat: Matrix4<f32>, tex_registry: &TextureRegistry, render_queue: &Vec<ChunkRenderQueueEntry>) -> AutoCommandBuffer {
         let mut descriptor_sets = Vec::new();
         for entry in render_queue.iter() {
-            let uniform_data = DefaultShaders::vertex::ty::Data {
+            let uniform_data = ChunksShaders::vertex::ty::Data {
                 world: entry.transform.clone().into(),
                 view: view_mat.into(),
                 proj: proj_mat.into(),
@@ -83,7 +82,7 @@ impl ChunkRenderPipeline {
             };
 
             let subbuffer = self.uniform_buffer_pool.next(uniform_data).unwrap();
-            descriptor_sets.push(Arc::new(::vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(self.vulkan_pipeline.clone(), 0)
+            descriptor_sets.push(Arc::new(PersistentDescriptorSet::start(self.vulkan_pipeline.clone(), 0)
                 .add_sampled_image(tex_registry.get(&entry.material.albedo_map_name).unwrap().clone(), self.sampler.clone()).unwrap()
                 .add_buffer(subbuffer).unwrap()
                 .build().unwrap()
@@ -94,7 +93,7 @@ impl ChunkRenderPipeline {
             .unwrap()
             .begin_render_pass(
                 self.framebuffers.as_ref().unwrap()[image_num].clone(), false,
-                vec![[0.0, 0.0, 0.0, 1.0].into(), 1f32.into()]).unwrap();
+                vec![::vulkano::format::ClearValue::None, ::vulkano::format::ClearValue::None]).unwrap();
         for (i, entry) in render_queue.iter().enumerate() {
             cb = cb.draw_indexed(self.vulkan_pipeline.clone(), DynamicState {
                 line_width: None,
@@ -113,19 +112,14 @@ impl ChunkRenderPipeline {
             .build().unwrap();
         cb
     }
-}
 
 
-impl RenderPipeline for ChunkRenderPipeline {
-    fn pipeline(&self) -> &Arc<GraphicsPipelineAbstract + Send + Sync> { &self.vulkan_pipeline }
-
-
-    fn remove_framebuffers(&mut self) {
+    pub fn remove_framebuffers(&mut self) {
         self.framebuffers = None;
     }
 
 
-    fn recreate_framebuffers(&mut self, images: &Vec<Arc<SwapchainImage<Window>>>, depth_buffer: &Arc<AttachmentImage<D32Sfloat>>) {
+    pub fn recreate_framebuffers(&mut self, images: &Vec<Arc<SwapchainImage<Window>>>, depth_buffer: &Arc<AttachmentImage<D32Sfloat>>) {
         let new_framebuffers = Some(images.iter().map(|image| {
             let arc: Arc<FramebufferAbstract + Send + Sync> = Arc::new(Framebuffer::start(self.renderpass.clone())
                 .add(image.clone()).unwrap()

@@ -107,7 +107,7 @@ impl Chunk {
             }
         }
         mesh.vertex_groups.push(Arc::new(VertexGroup::new(vertices, indices, 0, renderer)));
-        mesh.materials.push(Material { albedo_map_name: String::from("stone") });
+        mesh.materials.push(Material { albedo_map_name: String::from("dirt") });
         mesh.transform = Transform::from_position(Point3::new(self.position.0 as f32 * 16.0,
                                                               self.position.1 as f32 * 16.0,
                                                               self.position.2 as f32 * 16.0));

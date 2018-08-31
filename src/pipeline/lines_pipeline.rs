@@ -1,26 +1,25 @@
 use std::sync::Arc;
 
-use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
 use cgmath::Matrix4;
 use vulkano::buffer::BufferUsage;
 use vulkano::buffer::cpu_pool::CpuBufferPool;
+use vulkano::command_buffer::{AutoCommandBufferBuilder, AutoCommandBuffer, DynamicState};
+use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
 use vulkano::device::{Device, Queue};
+use vulkano::format::D32Sfloat;
 use vulkano::framebuffer::{FramebufferAbstract, Framebuffer, RenderPass, RenderPassDesc, Subpass};
+use vulkano::image::attachment::AttachmentImage;
+use vulkano::image::swapchain::SwapchainImage;
+use vulkano::pipeline::viewport::Viewport;
 use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::swapchain::Swapchain;
-use vulkano::image::swapchain::SwapchainImage;
 use winit::Window;
-use vulkano::format::D32Sfloat;
-use vulkano::image::attachment::AttachmentImage;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, AutoCommandBuffer, DynamicState};
-use vulkano::pipeline::viewport::Viewport;
 
+use buffer::CpuAccessibleBufferAutoPool;
 use geometry::VertexPositionColorAlpha;
+use pool::AutoMemoryPool;
 use renderpass::RenderPassUnclearedColorWithDepth;
 use shader::lines as LinesShaders;
-use buffer::CpuAccessibleBufferAutoPool;
-use pool::AutoMemoryPool;
-use super::RenderPipeline;
 
 
 // temp struct for debug drawing lines
@@ -41,7 +40,7 @@ pub struct LinesRenderPipeline {
 
 
 impl LinesRenderPipeline {
-    pub fn new(swapchain: &Swapchain<Window>, device: Arc<Device>, memory_pool: &AutoMemoryPool) -> LinesRenderPipeline {
+    pub fn new(swapchain: &Swapchain<Window>, device: &Arc<Device>, memory_pool: &AutoMemoryPool) -> LinesRenderPipeline {
         let vs = LinesShaders::vertex::Shader::load(device.clone()).expect("failed to create shader module");
         let fs = LinesShaders::fragment::Shader::load(device.clone()).expect("failed to create shader module");
 
@@ -122,19 +121,12 @@ impl LinesRenderPipeline {
             .end_render_pass().unwrap()
             .build().unwrap()
     }
-}
 
 
-impl RenderPipeline for LinesRenderPipeline {
-    fn pipeline(&self) -> &Arc<GraphicsPipelineAbstract + Send + Sync> { &self.vulkan_pipeline }
+    pub fn remove_framebuffers(&mut self) { self.framebuffers = None; }
 
 
-    fn remove_framebuffers(&mut self) {
-        self.framebuffers = None;
-    }
-
-
-    fn recreate_framebuffers(&mut self, images: &Vec<Arc<SwapchainImage<Window>>>, depth_buffer: &Arc<AttachmentImage<D32Sfloat>>) {
+    pub fn recreate_framebuffers(&mut self, images: &Vec<Arc<SwapchainImage<Window>>>, depth_buffer: &Arc<AttachmentImage<D32Sfloat>>) {
         let new_framebuffers = Some(images.iter().map(|image| {
             let arc: Arc<FramebufferAbstract + Send + Sync> = Arc::new(Framebuffer::start(self.renderpass.clone())
                 .add(image.clone()).unwrap()

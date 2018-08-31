@@ -3,7 +3,7 @@ pub mod vertex;
 pub mod vertexgroup;
 
 pub use self::mesh::Mesh;
-pub use self::vertex::{VertexPositionNormalUVColor, VertexPositionColorAlpha};
+pub use self::vertex::{VertexPositionNormalUVColor, VertexPositionColorAlpha, VertexPosition, VertexPositionUV};
 pub use self::vertexgroup::VertexGroup;
 
 
