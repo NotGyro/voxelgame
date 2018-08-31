@@ -15,6 +15,7 @@ mod game;
 mod geometry;
 mod input;
 mod mesh_simplifier;
+mod pipeline;
 mod player;
 mod pool;
 mod registry;

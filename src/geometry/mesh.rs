@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use ::geometry::{VertexGroup, Material};
-use ::renderer::RenderQueueMeshEntry;
-use ::util::Transform;
+use geometry::{VertexGroup, Material};
+use renderer::ChunkRenderQueueEntry;
+use util::Transform;
 
 
 pub struct Mesh {
@@ -22,13 +22,15 @@ impl Mesh {
     }
 
 
-    pub fn queue_draw(&self, queue: &mut Vec<RenderQueueMeshEntry>) {
+    pub fn queue(&self) -> Vec<ChunkRenderQueueEntry> {
+        let mut result = Vec::new();
         for vg in self.vertex_groups.iter() {
-            queue.push(RenderQueueMeshEntry {
+            result.push(ChunkRenderQueueEntry {
                 vertex_group: vg.clone(),
                 material: self.materials[vg.material_id as usize].clone(),
                 transform: self.transform.to_matrix()
             });
         }
+        result
     }
 }

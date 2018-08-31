@@ -8,11 +8,11 @@ use vulkano_win::VkSurfaceBuild;
 use winit::{EventsLoop, Event, WindowEvent, DeviceEvent};
 use winit::{Window, WindowBuilder};
 
-use ::renderer::{Renderer, RenderQueueMeshEntry};
-use ::input::InputState;
-use ::world::Dimension;
-use ::registry::DimensionRegistry;
-use ::player::Player;
+use renderer::Renderer;
+use input::InputState;
+use world::Dimension;
+use registry::DimensionRegistry;
+use player::Player;
 
 
 pub struct Game {
@@ -22,8 +22,7 @@ pub struct Game {
     prev_time: Instant,
     input_state: InputState,
     player: Player,
-    dimension_registry: DimensionRegistry,
-    render_queue: Vec<RenderQueueMeshEntry>
+    dimension_registry: DimensionRegistry
 }
 
 
@@ -52,8 +51,7 @@ impl Game {
             prev_time: Instant::now(),
             input_state,
             player,
-            dimension_registry,
-            render_queue: Vec::new()
+            dimension_registry
         }
     }
 
@@ -122,14 +120,16 @@ impl Game {
 
         self.dimension_registry.get(0).unwrap().load_unload_chunks(self.player.position.clone());
 
-        self.render_queue.clear();
+        self.renderer.chunk_mesh_queue.clear();
         for (_, mut chunk) in self.dimension_registry.get(0).unwrap().chunks.iter_mut() {
             if chunk.mesh_dirty {
                 chunk.generate_mesh(&self.renderer);
             }
-            chunk.mesh.queue_draw(&mut self.render_queue);
         }
-        self.renderer.draw(&self.player.camera, self.player.get_transform(), &self.render_queue);
+        for (_, chunk) in self.dimension_registry.get(0).unwrap().chunks.iter() {
+            self.renderer.chunk_mesh_queue.append(&mut chunk.mesh.queue());
+        }
+        self.renderer.draw(&self.player.camera, self.player.get_transform());
 
         return keep_running;
     }
