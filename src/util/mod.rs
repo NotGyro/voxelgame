@@ -94,15 +94,15 @@ pub mod cube {
             VertexPositionNormalUVColor { position: [ x,     y+1.0, z+1.0 ], normal: [ -1.0, 0.0, 0.0 ], uv: [ 1.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
             VertexPositionNormalUVColor { position: [ x,     y+1.0, z     ], normal: [ -1.0, 0.0, 0.0 ], uv: [ 0.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
 
-            VertexPositionNormalUVColor { position: [ x+1.0, y,     z+1.0 ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 0.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y,     z+1.0 ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 1.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y,     z     ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 1.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y,     z     ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 0.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
+            VertexPositionNormalUVColor { position: [ x+1.0, y,     z+1.0 ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 0.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
+            VertexPositionNormalUVColor { position: [ x,     y,     z+1.0 ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 1.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
+            VertexPositionNormalUVColor { position: [ x,     y,     z     ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 1.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
+            VertexPositionNormalUVColor { position: [ x+1.0, y,     z     ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 0.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
 
-            VertexPositionNormalUVColor { position: [ x,     y+1.0, z+1.0 ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 0.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y+1.0, z+1.0 ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 1.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y+1.0, z     ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 1.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y+1.0, z     ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 0.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
+            VertexPositionNormalUVColor { position: [ x,     y+1.0, z+1.0 ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 0.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
+            VertexPositionNormalUVColor { position: [ x+1.0, y+1.0, z+1.0 ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 1.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
+            VertexPositionNormalUVColor { position: [ x+1.0, y+1.0, z     ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 1.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
+            VertexPositionNormalUVColor { position: [ x,     y+1.0, z     ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 0.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
         ]
     }
 

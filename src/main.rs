@@ -6,17 +6,15 @@ extern crate noise;
 extern crate rand;
 extern crate smallvec;
 extern crate winit;
-
-#[macro_use]
-extern crate vulkano;
-#[macro_use]
-extern crate vulkano_shader_derive;
+#[macro_use] extern crate vulkano;
+#[macro_use] extern crate vulkano_shader_derive;
 
 mod allocator;
 mod buffer;
 mod game;
 mod geometry;
 mod input;
+mod mesh_simplifier;
 mod player;
 mod pool;
 mod registry;

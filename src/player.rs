@@ -45,7 +45,7 @@ impl Player {
 
             const MOVE_SPEED: f32 = 5.0;  // units per second
             let mut speed = MOVE_SPEED * dt as f32;
-            if input.get_key_down(&VirtualKeyCode::LShift) { speed *= 3.0; }
+            if input.get_key_down(&VirtualKeyCode::LShift) { speed *= 15.0; }
             // can't normalize (0, 0, 0)
             if move_vec.magnitude() == 0.0 {
                 move_vec = move_vec * speed;
