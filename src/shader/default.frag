@@ -1,8 +1,9 @@
 #version 450
 
-layout(location = 0) in vec3 v_normal;
-layout(location = 1) in vec2 tex_coords;
+layout(location = 0) in vec3 normal_world; // normal in world space
+layout(location = 1) in vec2 uv;
 layout(location = 2) in vec3 v_color;
+layout(location = 3) in vec3 surface_pos;
 
 layout(location = 0) out vec4 f_color;
 
@@ -12,14 +13,34 @@ layout(set = 0, binding = 1) uniform Data {
     mat4 world;
     mat4 view;
     mat4 proj;
+    vec3 view_pos;
 } uniforms;
+
 
 vec3 hemisphere_light(vec3 normal, vec3 lightDirection, vec3 sky, vec3 ground) {
   float weight = 0.5 * dot(normalize(normal), lightDirection) + 0.5;
   return mix(ground, sky, weight);
 }
 
+
+// all parameters in world space
+vec3 DirectionalLight(const in vec3 normal, const in vec3 light_dir, const in vec3 surface_pos) {
+    vec3 view_dir = normalize(uniforms.view_pos - surface_pos);
+    vec3 half_vec = normalize(light_dir + view_dir);
+	float spec = pow(max(dot(normal, half_vec), 0.0), 32);
+
+    // light brightnesses (ambient, diffuse, specular). normalized so total light <= 0
+    vec3 brightnesses = normalize(vec3(0.2, 0.7, 0.4));
+    vec3 result = vec3(brightnesses.x); // ambient
+	result += vec3(brightnesses.y) * max(0.0, dot(normal, normalize(light_dir))); // diffuse
+	result += vec3(brightnesses.z) * spec; // specular
+	return result;
+}
+
 void main() {
-    vec3 light = hemisphere_light(v_normal, vec3(0.188144, 0.940721, 0.282216), vec3(1.0, 1.0, 1.0), vec3(0.6, 0.6, 0.6));
-    f_color = vec4(/*v_normal * */ light * texture(tex, tex_coords).xyz /* * v_color */, 1.0);
+    vec3 light_dir = normalize(vec3(0.4, 1.0, 0.8));
+
+    vec3 lighting = DirectionalLight(normal_world, light_dir, surface_pos);
+
+    f_color = vec4(lighting * texture(tex, uv).xyz * v_color, 1.0);
 }

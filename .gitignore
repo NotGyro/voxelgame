@@ -1,4 +1,5 @@
 /.idea/
 /target/
+/notes/
 voxelgame.iml
 **/*.rs.bk

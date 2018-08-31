@@ -97,7 +97,14 @@ impl Renderer {
             dimensions = capabilities.current_extent.unwrap_or([1024, 768]);
             let usage = capabilities.supported_usage_flags;
             let alpha = capabilities.supported_composite_alpha.iter().next().unwrap();
-            let format = capabilities.supported_formats[0].0;
+
+            let format;
+            if capabilities.supported_formats.contains(&(::vulkano::format::Format::B8G8R8A8Srgb, ::vulkano::swapchain::ColorSpace::SrgbNonLinear)) {
+                format = ::vulkano::format::Format::B8G8R8A8Srgb;
+            }
+            else {
+                format = capabilities.supported_formats[0].0;
+            }
 
             Swapchain::new(device.clone(), surface.clone(), capabilities.min_image_count,
                            format, dimensions, 1, usage, &queue,
@@ -208,8 +215,12 @@ impl Renderer {
             Some(::winit::dpi::LogicalSize{ width, height }) => [width as u32, height as u32],
             None => [1024, 768]
         };
+        // minimizing window makes dimensions = [0, 0] which breaks swapchain creation.
+        // skip draw loop until window is restored.
+        if dimensions[0] < 1 || dimensions[1] < 1 { return; }
 
         if self.recreate_swapchain {
+            println!("Recreating swapchain");
             let (new_swapchain, new_images) = match self.swapchain.recreate_with_dimension(dimensions) {
                 Ok(r) => r,
                 Err(SwapchainCreationError::UnsupportedDimensions) => {
@@ -255,9 +266,10 @@ impl Renderer {
         let mut descriptor_sets = Vec::new();
         for entry in render_queue.iter() {
             let uniform_data = DefaultShaders::vertex::ty::Data {
-                world : entry.transform.clone().into(),
-                view : view_mat.into(),
-                proj : (VULKAN_CORRECT_CLIP * ::cgmath::perspective(camera.fov, { dimensions[0] as f32 / dimensions[1] as f32 }, 0.1, 100.0)).into(),
+                world: entry.transform.clone().into(),
+                view: view_mat.into(),
+                proj: (VULKAN_CORRECT_CLIP * ::cgmath::perspective(camera.fov, { dimensions[0] as f32 / dimensions[1] as f32 }, 0.1, 100.0)).into(),
+                view_pos: transform.position.into(),
             };
 
             let subbuffer = self.uniform_buffer_pool.next(uniform_data).unwrap();
@@ -271,9 +283,9 @@ impl Renderer {
         let line_descriptor_set;
         {
             let subbuffer = self.uniform_buffer_pool_lines.next(LinesShaders::vertex::ty::Data {
-                world : Matrix4::from_scale(1.0).into(),
-                view : view_mat.into(),
-                proj : (VULKAN_CORRECT_CLIP * ::cgmath::perspective(camera.fov, { dimensions[0] as f32 / dimensions[1] as f32 }, 0.1, 100.0)).into(),
+                world: Matrix4::from_scale(1.0).into(),
+                view: view_mat.into(),
+                proj: (VULKAN_CORRECT_CLIP * ::cgmath::perspective(camera.fov, { dimensions[0] as f32 / dimensions[1] as f32 }, 0.1, 100.0)).into(),
             }).unwrap();
             line_descriptor_set = Arc::new(::vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(self.pipeline_lines.clone(), 0)
                 .add_buffer(subbuffer).unwrap()

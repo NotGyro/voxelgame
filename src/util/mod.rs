@@ -67,59 +67,7 @@ impl Camera {
 
 
 pub mod cube {
-    use ::geometry::{VertexPositionNormalUVColor, VertexPositionColorAlpha};
-
-    pub fn generate_unit_cube(x: i32, y: i32, z: i32) -> [VertexPositionNormalUVColor; 24] {
-        let x = x as f32;
-        let y = y as f32;
-        let z = z as f32;
-        [
-            VertexPositionNormalUVColor { position: [ x+1.0, y,     z     ], normal: [ 0.0, 0.0, -1.0 ], uv: [ 0.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y,     z     ], normal: [ 0.0, 0.0, -1.0 ], uv: [ 1.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y+1.0, z     ], normal: [ 0.0, 0.0, -1.0 ], uv: [ 1.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y+1.0, z     ], normal: [ 0.0, 0.0, -1.0 ], uv: [ 0.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-
-            VertexPositionNormalUVColor { position: [ x+1.0, y,     z+1.0 ], normal: [ 1.0, 0.0, 0.0 ], uv: [ 0.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y,     z     ], normal: [ 1.0, 0.0, 0.0 ], uv: [ 1.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y+1.0, z     ], normal: [ 1.0, 0.0, 0.0 ], uv: [ 1.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y+1.0, z+1.0 ], normal: [ 1.0, 0.0, 0.0 ], uv: [ 0.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-
-            VertexPositionNormalUVColor { position: [ x,     y,     z+1.0 ], normal: [ 0.0, 0.0, 1.0 ], uv: [ 0.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y,     z+1.0 ], normal: [ 0.0, 0.0, 1.0 ], uv: [ 1.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y+1.0, z+1.0 ], normal: [ 0.0, 0.0, 1.0 ], uv: [ 1.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y+1.0, z+1.0 ], normal: [ 0.0, 0.0, 1.0 ], uv: [ 0.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-
-            VertexPositionNormalUVColor { position: [ x,     y,     z     ], normal: [ -1.0, 0.0, 0.0 ], uv: [ 0.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y,     z+1.0 ], normal: [ -1.0, 0.0, 0.0 ], uv: [ 1.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y+1.0, z+1.0 ], normal: [ -1.0, 0.0, 0.0 ], uv: [ 1.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y+1.0, z     ], normal: [ -1.0, 0.0, 0.0 ], uv: [ 0.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-
-            VertexPositionNormalUVColor { position: [ x+1.0, y,     z+1.0 ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 0.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y,     z+1.0 ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 1.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y,     z     ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 1.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y,     z     ], normal: [ 0.0, -1.0, 0.0 ], uv: [ 0.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-
-            VertexPositionNormalUVColor { position: [ x,     y+1.0, z+1.0 ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 0.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y+1.0, z+1.0 ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 1.0, 0.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x+1.0, y+1.0, z     ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 1.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-            VertexPositionNormalUVColor { position: [ x,     y+1.0, z     ], normal: [ 0.0, 1.0, 0.0 ], uv: [ 0.0, 1.0 ], color: [ 1.0, 1.0, 1.0 ] },
-        ]
-    }
-
-
-    /// Generate indices for cube given an offset.
-    /// Offset is the number of cubes to offset by, not the number of indices.
-    pub fn generate_indices_with_offset(offset: u32) -> [u32; 36] {
-        let o = offset * 24;
-        [
-            0+o,  1+o,  2+o,  2+o,  3+o,  0+o,
-            4+o,  5+o,  6+o,  6+o,  7+o,  4+o,
-            8+o,  9+o, 10+o, 10+o, 11+o,  8+o,
-            12+o, 13+o, 14+o, 14+o, 15+o, 12+o,
-            16+o, 17+o, 18+o, 18+o, 19+o, 16+o,
-            20+o, 21+o, 22+o, 22+o, 23+o, 20+o
-        ]
-    }
+    use ::geometry::VertexPositionColorAlpha;
 
 
     pub fn generate_chunk_debug_line_vertices(x: i32, y: i32, z: i32, a: f32) -> [VertexPositionColorAlpha; 8] {

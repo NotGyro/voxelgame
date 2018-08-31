@@ -28,7 +28,7 @@ impl Dimension {
 
         let gen = PerlinGenerator::new();
         let player_x_in_chunks = (player_pos.x / 16.0) as i32;
-        let player_y_in_chunks = (player_pos.y / 16.0) as i32;
+        //let player_y_in_chunks = (player_pos.y / 16.0) as i32;
         let player_z_in_chunks = (player_pos.z / 16.0) as i32;
         // TODO: disabled chunk spawn on Y axis for mesh simplifier testing
         for cx in (player_x_in_chunks-CHUNK_RADIUS)..(player_x_in_chunks+CHUNK_RADIUS+1) {
