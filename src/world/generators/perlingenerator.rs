@@ -22,10 +22,10 @@ impl PerlinGenerator {
 
         PerlinGenerator {
             perlin,
-            scale: 0.0102,
+            scale: 0.005126,
             offset: 0.26378,
             block_type_noise,
-            block_type_scale: 0.083647,
+            block_type_scale: 0.063647,
         }
     }
 }
@@ -38,7 +38,7 @@ impl WorldGenerator for PerlinGenerator {
         for x in 0..16 {
             for z in 0..16 {
                 let height_norm = self.perlin.get([((pos.0*16 + x) as f64 + self.offset) * self.scale, ((pos.2*16 + z) as f64 + self.offset) * self.scale]) / 2.0 + 0.5;
-                let height_abs = height_norm as f32 * 16.0;
+                let height_abs = height_norm as f32 * 32.0;
                 for y in 0..16 {
                     if (pos.1 as f32 * 16.0) + y as f32 <= height_abs {
                         let block_type_val = self.block_type_noise.get([((pos.0*16 + x) as f64) * self.block_type_scale, ((pos.2*16 + z) as f64) * self.block_type_scale]) / 2.0 + 0.5;

@@ -8,7 +8,7 @@ use vulkano::image::attachment::AttachmentImage;
 use vulkano::image::swapchain::SwapchainImage;
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::swapchain::{Swapchain, Surface, SwapchainCreationError};
-use vulkano::sync::{GpuFuture};
+use vulkano::sync::GpuFuture;
 use winit::Window;
 
 use util::{Camera, Transform};
@@ -115,7 +115,7 @@ impl Renderer {
             skybox_pipeline,
             chunk_pipeline,
             lines_pipeline,
-            chunk_mesh_queue: Vec::new()
+            chunk_mesh_queue: Vec::new(),
         }
     }
 
@@ -187,7 +187,7 @@ impl Renderer {
             .then_signal_fence_and_flush();
 
         match future {
-            Ok(mut f) => { f.cleanup_finished() }
+            Ok(mut f) => { f.cleanup_finished(); }
             Err(::vulkano::sync::FlushError::OutOfDate) => {
                 self.recreate_swapchain = true;
             }

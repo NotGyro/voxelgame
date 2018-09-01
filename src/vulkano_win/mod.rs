@@ -128,7 +128,7 @@ unsafe fn winit_to_surface<W: SafeBorrow<winit::Window>>(
 }
 
 #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
-unsafe fn winit_to_surface<W: SafeBorrow<winit::Window>>(
+unsafe fn winit_to_surface<W: SafeBorrow<::winit::Window>>(
     instance: Arc<Instance>, win: W,
 ) -> Result<Arc<Surface<W>>, SurfaceCreationError> {
     use winit::os::unix::WindowExt;

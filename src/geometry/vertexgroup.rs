@@ -5,10 +5,11 @@
 use std::sync::Arc;
 
 use vulkano::buffer::BufferUsage;
+use vulkano::device::Device;
 
 use buffer::CpuAccessibleBufferAutoPool;
 use geometry::VertexPositionNormalUVColor;
-use renderer::Renderer;
+use pool::AutoMemoryPool;
 
 
 // TODO: linking vertgroup to material by id field is probably fragile
@@ -32,7 +33,7 @@ pub struct VertexGroup {
 
 impl VertexGroup {
     /// Constructs a new `VertexGroup` with the given parameters.
-    pub fn new(verts: Vec<VertexPositionNormalUVColor>, idxs: Vec<u32>, mat_id: u8, renderer: &Renderer) -> VertexGroup {
+    pub fn new(verts: Vec<VertexPositionNormalUVColor>, idxs: Vec<u32>, mat_id: u8, device: Arc<Device>, memory_pool: AutoMemoryPool) -> VertexGroup {
         let mut group = VertexGroup {
             vertices: verts.to_vec(),
             vertex_buffer: None,
@@ -40,26 +41,26 @@ impl VertexGroup {
             index_buffer: None,
             material_id: mat_id
         };
-        group.update_buffers(renderer);
+        group.update_buffers(device, memory_pool);
         group
     }
 
 
     /// Updates both buffers with data from their respective `Vec`s.
-    pub fn update_buffers(&mut self, renderer: &Renderer) {
-        self.update_vertex_buffer(renderer);
-        self.update_index_buffer(renderer);
+    pub fn update_buffers(&mut self, device: Arc<Device>, memory_pool: AutoMemoryPool) {
+        self.update_vertex_buffer(device.clone(), memory_pool.clone());
+        self.update_index_buffer(device, memory_pool);
     }
 
 
     /// Updates the vertex buffer with data from `vertex_buffer`.
-    pub fn update_vertex_buffer(&mut self, renderer: &Renderer) {
-        self.vertex_buffer = Some(CpuAccessibleBufferAutoPool::from_iter(renderer.device.clone(), renderer.memory_pool.clone(), BufferUsage::all(), self.vertices.iter().cloned()).expect("failed to create vertex buffer"));
+    pub fn update_vertex_buffer(&mut self, device: Arc<Device>, memory_pool: AutoMemoryPool) {
+        self.vertex_buffer = Some(CpuAccessibleBufferAutoPool::from_iter(device.clone(), memory_pool.clone(), BufferUsage::all(), self.vertices.iter().cloned()).expect("failed to create vertex buffer"));
     }
 
 
     /// Updates the index buffer with data from `index_buffer`.
-    pub fn update_index_buffer(&mut self, renderer: &Renderer) {
-        self.index_buffer = Some(CpuAccessibleBufferAutoPool::from_iter(renderer.device.clone(), renderer.memory_pool.clone(), BufferUsage::all(), self.indices.iter().cloned()).expect("failed to create index buffer"));
+    pub fn update_index_buffer(&mut self, device: Arc<Device>, memory_pool: AutoMemoryPool) {
+        self.index_buffer = Some(CpuAccessibleBufferAutoPool::from_iter(device.clone(), memory_pool.clone(), BufferUsage::all(), self.indices.iter().cloned()).expect("failed to create index buffer"));
     }
 }

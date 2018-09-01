@@ -2,11 +2,17 @@ use std::sync::Arc;
 use std::collections::HashSet;
 
 use cgmath::Point3;
+use vulkano::device::Device;
 
-use ::geometry::{Mesh, VertexPositionNormalUVColor, VertexGroup, Material};
-use ::util::Transform;
-use ::renderer::Renderer;
+use geometry::{Mesh, VertexPositionNormalUVColor, VertexGroup, Material};
+use util::Transform;
 use mesh_simplifier::{MeshSimplifier, QuadFacing};
+use pool::AutoMemoryPool;
+
+
+pub static CHUNK_STATE_DIRTY: usize = 0;
+pub static CHUNK_STATE_WRITING: usize = 1;
+pub static CHUNK_STATE_CLEAN: usize = 2;
 
 
 /// Struct representing blocks in a 16x16x16 chunk.
@@ -16,8 +22,7 @@ pub struct Chunk {
     pub ids: [u8; 16*16*16],
     pub position: (i32, i32, i32),
     pub dimension_id: u32,
-    pub mesh: Mesh,
-    pub mesh_dirty: bool
+    pub mesh: Mesh
 }
 
 
@@ -28,8 +33,7 @@ impl Chunk {
             ids: [0; 16*16*16],
             position,
             dimension_id,
-            mesh: Mesh::new(),
-            mesh_dirty: false
+            mesh: Mesh::new()
         }
     }
 
@@ -56,7 +60,7 @@ impl Chunk {
     }
 
 
-    pub fn generate_mesh(&mut self, renderer: &Renderer) {
+    pub fn generate_mesh(&mut self, device: Arc<Device>, memory_pool: AutoMemoryPool) {
         let quad_lists = MeshSimplifier::generate_mesh(self);
 
         // get all unique ids and seperate
@@ -122,7 +126,7 @@ impl Chunk {
                     o += 4;
                 }
             }
-            mesh.vertex_groups.push(Arc::new(VertexGroup::new(vertices, indices, *id as u8, renderer)));
+            mesh.vertex_groups.push(Arc::new(VertexGroup::new(vertices, indices, *id as u8, device.clone(), memory_pool.clone())));
             mesh.transform = Transform::from_position(Point3::new(self.position.0 as f32 * 16.0,
                                                                   self.position.1 as f32 * 16.0,
                                                                   self.position.2 as f32 * 16.0));
@@ -134,6 +138,5 @@ impl Chunk {
         mesh.materials.push(Material { albedo_map_name: String::from("grass"), specular_exponent: 64.0, specular_strength: 0.7 });
 
         self.mesh = mesh;
-        self.mesh_dirty = false;
     }
 }

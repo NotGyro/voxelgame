@@ -1,11 +1,15 @@
+use std::sync::{Arc, RwLock};
+use std::sync::atomic::AtomicUsize;
+
 use std::collections::HashMap;
 use cgmath::{Point3, MetricSpace};
 use ::world::Chunk;
 use ::world::generators::{WorldGenerator, PerlinGenerator};
+use world::chunk::CHUNK_STATE_DIRTY;
 
 
 pub struct Dimension {
-    pub chunks: HashMap<(i32, i32, i32), Chunk>
+    pub chunks: HashMap<(i32, i32, i32), (Arc<RwLock<Chunk>>, Arc<AtomicUsize>)>
 }
 
 
@@ -18,7 +22,7 @@ impl Dimension {
 
 
     pub fn load_unload_chunks(&mut self, player_pos: Point3<f32>) {
-        const CHUNK_RADIUS: i32 = 4;
+        const CHUNK_RADIUS: i32 = 2;
         const CHUNK_DISTANCE: f32 = CHUNK_RADIUS as f32 * 2.0 * 16.0;
         self.chunks.retain(|pos, _| {
             let chunk_pos = Point3::new(pos.0 as f32 * 16.0 + 8.0, pos.1 as f32 * 16.0 + 8.0, pos.2 as f32 * 16.0 + 8.0);
@@ -28,29 +32,26 @@ impl Dimension {
 
         let gen = PerlinGenerator::new();
         let player_x_in_chunks = (player_pos.x / 16.0) as i32;
-        //let player_y_in_chunks = (player_pos.y / 16.0) as i32;
+        let player_y_in_chunks = (player_pos.y / 16.0) as i32;
         let player_z_in_chunks = (player_pos.z / 16.0) as i32;
-        // TODO: disabled chunk spawn on Y axis for mesh simplifier testing. need to multithread
-        // chunk gen before re-enabling y-axis, otherwise performance is unacceptable
         for cx in (player_x_in_chunks-CHUNK_RADIUS)..(player_x_in_chunks+CHUNK_RADIUS+1) {
-            //for cy in (player_y_in_chunks-CHUNK_RADIUS)..(player_y_in_chunks+CHUNK_RADIUS+1) {
+            for cy in (player_y_in_chunks-CHUNK_RADIUS)..(player_y_in_chunks+CHUNK_RADIUS+1) {
                 for cz in (player_z_in_chunks-CHUNK_RADIUS)..(player_z_in_chunks+CHUNK_RADIUS+1) {
-                    let chunk_pos = (cx as i32, 0i32, cz as i32);
+                    let chunk_pos = (cx as i32, cy as i32, cz as i32);
                     if self.chunks.contains_key(&chunk_pos) {
                         continue;
                     }
 
                     let chunk_world_pos = Point3::new(cx as f32 * 16.0 + 8.0,
-                                                      0f32,//cy as f32 * 16.0 + 8.0,
+                                                      cy as f32 * 16.0 + 8.0,
                                                       cz as f32 * 16.0 + 8.0);
                     let dist = Point3::distance(chunk_world_pos, player_pos);
                     if dist < CHUNK_DISTANCE {
                         let mut chunk = gen.generate(chunk_pos, 0);
-                        chunk.mesh_dirty = true;
-                        self.chunks.insert(chunk_pos, chunk);
+                        self.chunks.insert(chunk_pos, (Arc::new(RwLock::new(chunk)), Arc::new(AtomicUsize::new(CHUNK_STATE_DIRTY))));
                     }
                 }
-            //}
+            }
         }
     }
 }

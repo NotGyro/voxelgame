@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
+use std::thread;
 use std::time::Instant;
 
 use cgmath::Point3;
@@ -13,6 +15,7 @@ use input::InputState;
 use world::Dimension;
 use registry::DimensionRegistry;
 use player::Player;
+use world::chunk::{CHUNK_STATE_DIRTY, CHUNK_STATE_WRITING, CHUNK_STATE_CLEAN};
 
 
 pub struct Game {
@@ -36,7 +39,7 @@ impl Game {
         let input_state = InputState::new();
 
         let mut player = Player::new();
-        player.position = Point3::new(16.0, 16.0, 16.0);
+        player.position = Point3::new(16.0, 32.0, 16.0);
         player.yaw = 135.0;
         player.pitch = -30.0;
 
@@ -121,14 +124,30 @@ impl Game {
         self.dimension_registry.get(0).unwrap().load_unload_chunks(self.player.position.clone());
 
         self.renderer.chunk_mesh_queue.clear();
-        for (_, mut chunk) in self.dimension_registry.get(0).unwrap().chunks.iter_mut() {
-            if chunk.mesh_dirty {
-                chunk.generate_mesh(&self.renderer);
+        for (_, (ref mut chunk, ref mut state)) in self.dimension_registry.get(0).unwrap().chunks.iter_mut() {
+            let is_dirty = state.load(Ordering::Relaxed) == CHUNK_STATE_DIRTY;
+            if is_dirty {
+                state.store(CHUNK_STATE_WRITING, Ordering::Relaxed);
+                let chunk_arc = chunk.clone();
+                let device_arc = self.renderer.device.clone();
+                let memory_pool_arc = self.renderer.memory_pool.clone();
+                let state_lock = state.clone();
+                thread::spawn(move || {
+                    let mut chunk_lock = chunk_arc.write().unwrap();
+                    chunk_lock.generate_mesh(device_arc, memory_pool_arc);
+                    state_lock.store(CHUNK_STATE_CLEAN, Ordering::Relaxed);
+                });
             }
         }
-        for (_, chunk) in self.dimension_registry.get(0).unwrap().chunks.iter() {
-            self.renderer.chunk_mesh_queue.append(&mut chunk.mesh.queue());
+
+        for (_, (chunk, state)) in self.dimension_registry.get(0).unwrap().chunks.iter() {
+            let is_ready = state.load(Ordering::Relaxed) == CHUNK_STATE_CLEAN;
+            if is_ready {
+                let chunk_lock = chunk.read().unwrap();
+                self.renderer.chunk_mesh_queue.append(&mut chunk_lock.mesh.queue());
+            }
         }
+
         self.renderer.draw(&self.player.camera, self.player.get_transform());
 
         return keep_running;
