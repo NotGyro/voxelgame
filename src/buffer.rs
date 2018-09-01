@@ -1,4 +1,4 @@
-//! Buffer whose content is accessible to the CPU.
+//! Buffer whose content is accessible to the CPU. Managed by AutoMemoryPool.
 //!
 //! The `CpuAccessibleBufferAutoPool` is a basic general-purpose buffer. It's memory is managed by
 //! a `AutoMemoryPool`. It can be used in any situation but may not perform as well as other buffer

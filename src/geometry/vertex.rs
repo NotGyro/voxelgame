@@ -1,3 +1,7 @@
+//! Vertex types.
+
+
+/// A vertex type with position, normal, uv, and color data.
 #[derive(Debug, Clone)]
 pub struct VertexPositionNormalUVColor {
     pub position: [f32; 3],
@@ -8,6 +12,7 @@ pub struct VertexPositionNormalUVColor {
 impl_vertex!(VertexPositionNormalUVColor, position, normal, uv, color);
 
 
+/// A vertex type with position and color + alpha data.
 #[derive(Debug, Clone)]
 pub struct VertexPositionColorAlpha {
     pub position: [f32; 3],
@@ -16,6 +21,7 @@ pub struct VertexPositionColorAlpha {
 impl_vertex!(VertexPositionColorAlpha, position, color);
 
 
+/// A vertex type with position data.
 #[derive(Debug, Clone)]
 pub struct VertexPosition {
     pub position: [f32; 3]
@@ -23,6 +29,7 @@ pub struct VertexPosition {
 impl_vertex!(VertexPosition, position);
 
 
+/// A vertex type with position and uv data.
 #[derive(Debug, Clone)]
 pub struct VertexPositionUV {
     pub position: [f32; 3],

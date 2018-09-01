@@ -30,7 +30,8 @@ impl Dimension {
         let player_x_in_chunks = (player_pos.x / 16.0) as i32;
         //let player_y_in_chunks = (player_pos.y / 16.0) as i32;
         let player_z_in_chunks = (player_pos.z / 16.0) as i32;
-        // TODO: disabled chunk spawn on Y axis for mesh simplifier testing
+        // TODO: disabled chunk spawn on Y axis for mesh simplifier testing. need to multithread
+        // chunk gen before re-enabling y-axis, otherwise performance is unacceptable
         for cx in (player_x_in_chunks-CHUNK_RADIUS)..(player_x_in_chunks+CHUNK_RADIUS+1) {
             //for cy in (player_y_in_chunks-CHUNK_RADIUS)..(player_y_in_chunks+CHUNK_RADIUS+1) {
                 for cz in (player_z_in_chunks-CHUNK_RADIUS)..(player_z_in_chunks+CHUNK_RADIUS+1) {

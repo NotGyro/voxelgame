@@ -1,7 +1,5 @@
 use world::Chunk;
 
-// TODO: culling
-
 #[derive(Clone)]
 pub struct InputQuad { x: usize, y: usize, exists: bool, done: bool, pub block_id: usize }
 #[derive(Debug, Clone)]

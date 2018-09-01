@@ -155,7 +155,6 @@ impl Renderer {
             self.recreate_swapchain = false;
         }
 
-        // TODO: is this necessary here? or just recreate frambuffers above?
         if self.skybox_pipeline.framebuffers.is_none() {
             self.skybox_pipeline.recreate_framebuffers(&self.images, &self.depth_buffer);
         }
