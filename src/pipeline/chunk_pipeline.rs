@@ -79,6 +79,8 @@ impl ChunkRenderPipeline {
                 view: view_mat.into(),
                 proj: proj_mat.into(),
                 view_pos: transform.position.into(),
+                specular_exponent: entry.material.specular_exponent,
+                specular_strength: entry.material.specular_strength
             };
 
             let subbuffer = self.uniform_buffer_pool.next(uniform_data).unwrap();

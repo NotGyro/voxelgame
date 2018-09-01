@@ -9,5 +9,7 @@ pub use self::vertexgroup::VertexGroup;
 
 #[derive(Clone)]
 pub struct Material {
-    pub albedo_map_name: String
+    pub albedo_map_name: String,
+    pub specular_exponent: f32,
+    pub specular_strength: f32
 }

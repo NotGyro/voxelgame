@@ -63,7 +63,7 @@ impl SkyboxRenderPipeline {
             .unwrap());
 
         const SIZE: f32 = 500.0;
-        let mut verts = vec![
+        let verts = vec![
             VertexPositionUV { position: [  SIZE, -SIZE, -SIZE ], uv: [ 0.3333, 0.5 ] },
             VertexPositionUV { position: [ -SIZE, -SIZE, -SIZE ], uv: [ 0.6666, 0.5 ] },
             VertexPositionUV { position: [ -SIZE,  SIZE, -SIZE ], uv: [ 0.6666, 0.0 ] },
@@ -94,7 +94,7 @@ impl SkyboxRenderPipeline {
             VertexPositionUV { position: [  SIZE,  SIZE, -SIZE ], uv: [ 0.001, 0.502 ] },
             VertexPositionUV { position: [ -SIZE,  SIZE, -SIZE ], uv: [ 0.332, 0.502 ] },
         ];
-        let mut idxs = vec![
+        let idxs = vec![
             0, 1, 2, 2, 3, 0,
             4, 5, 6, 6, 7, 4,
             8, 9, 10, 10, 11, 8,

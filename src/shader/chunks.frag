@@ -14,6 +14,8 @@ layout(set = 0, binding = 1) uniform Data {
     mat4 view;
     mat4 proj;
     vec3 view_pos;
+    float specular_exponent;
+    float specular_strength;
 } uniforms;
 
 
@@ -27,18 +29,16 @@ vec3 hemisphere_light(vec3 normal, vec3 lightDirection, vec3 sky, vec3 ground) {
 vec3 DirectionalLight(const in vec3 normal, const in vec3 light_dir, const in vec3 surface_pos) {
     vec3 view_dir = normalize(uniforms.view_pos - surface_pos);
     vec3 half_vec = normalize(light_dir + view_dir);
-	float spec = pow(max(dot(normal, half_vec), 0.0), 32);
+	float spec = pow(max(dot(normal, half_vec), 0.0), uniforms.specular_exponent);
 
-    // light brightnesses (ambient, diffuse, specular). normalized so total light <= 0
-    vec3 brightnesses = normalize(vec3(0.2, 0.7, 0.4));
-    vec3 result = vec3(brightnesses.x); // ambient
-	result += vec3(brightnesses.y) * max(0.0, dot(normal, normalize(light_dir))); // diffuse
-	result += vec3(brightnesses.z) * spec; // specular
+    vec3 result = vec3(0.2); // ambient
+	result += vec3(1.0) * max(0.0, dot(normal, normalize(light_dir))); // diffuse
+	result += vec3(uniforms.specular_strength) * spec; // specular
 	return result;
 }
 
 void main() {
-    vec3 light_dir = normalize(vec3(0.4, 1.0, 0.8));
+    vec3 light_dir = normalize(vec3(0.4, 0.7, 1.0));
 
     vec3 lighting = DirectionalLight(normal_world, light_dir, surface_pos);
 

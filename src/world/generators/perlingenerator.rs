@@ -6,7 +6,9 @@ use ::world::Chunk;
 pub struct PerlinGenerator {
     perlin: Perlin,
     scale: f64,
-    offset: f64
+    offset: f64,
+    block_type_noise: Perlin,
+    block_type_scale: f64,
 }
 
 
@@ -14,10 +16,16 @@ impl PerlinGenerator {
     pub fn new() -> PerlinGenerator {
         let perlin = Perlin::new();
         perlin.set_seed(1);
+
+        let block_type_noise = Perlin::new();
+        perlin.set_seed(50);
+
         PerlinGenerator {
             perlin,
             scale: 0.0102,
-            offset: 0.26378
+            offset: 0.26378,
+            block_type_noise,
+            block_type_scale: 0.083647,
         }
     }
 }
@@ -33,7 +41,9 @@ impl WorldGenerator for PerlinGenerator {
                 let height_abs = height_norm as f32 * 16.0;
                 for y in 0..16 {
                     if (pos.1 as f32 * 16.0) + y as f32 <= height_abs {
-                        data[Chunk::xyz_to_i(x, y, z)] =  2u8;
+                        let block_type_val = self.block_type_noise.get([((pos.0*16 + x) as f64) * self.block_type_scale, ((pos.2*16 + z) as f64) * self.block_type_scale]) / 2.0 + 0.5;
+                        let block_id = ((block_type_val * 3.0) + 1.0) as u8;
+                        data[Chunk::xyz_to_i(x, y, z)] =  block_id;
                     }
                 }
             }

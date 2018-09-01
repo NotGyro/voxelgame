@@ -3,9 +3,9 @@ use world::Chunk;
 // TODO: culling
 
 #[derive(Clone)]
-pub struct InputQuad { x: usize, y: usize, exists: bool, done: bool }
+pub struct InputQuad { x: usize, y: usize, exists: bool, done: bool, pub block_id: usize }
 #[derive(Debug, Clone)]
-pub struct OutputQuad { pub x: usize, pub y: usize, pub w: usize, pub h: usize, width_done: bool }
+pub struct OutputQuad { pub x: usize, pub y: usize, pub w: usize, pub h: usize, width_done: bool, pub block_id: usize }
 
 pub enum QuadFacing {
     Left, Right, Top, Bottom, Front, Back
@@ -32,6 +32,7 @@ impl MeshSimplifier {
     }
 
     pub fn generate_slice(chunk: &Chunk, facing: QuadFacing, layer: usize) -> Vec<OutputQuad> {
+        // used to mark quads that overlap quads on other layers as non-existent to cull them
         let adjacent_index_offset: i32 = match facing {
             QuadFacing::Left => -16*16,
             QuadFacing::Right => 16*16,
@@ -40,7 +41,6 @@ impl MeshSimplifier {
             QuadFacing::Front => -1,
             QuadFacing::Back => 1
         };
-        // mark quads that overlap quads on other layers as non-existent to cull them
 
         let mut input_quads = Vec::new();
         for y in 0..16 {
@@ -50,19 +50,19 @@ impl MeshSimplifier {
                         let index = Chunk::xyz_to_i(layer as i32, x as i32, y as i32);
                         let adj_index = index as i32 + adjacent_index_offset;
                         let exists = chunk.ids[index] != 0 && !(adj_index >= 0 && adj_index < 16*16*16 && chunk.ids[adj_index as usize] != 0);
-                        input_quads.push(InputQuad { x, y, exists, done: false });
+                        input_quads.push(InputQuad { x, y, exists, done: false, block_id: chunk.ids[index] as usize });
                     },
                     QuadFacing::Top | QuadFacing::Bottom => {
                         let index = Chunk::xyz_to_i(x as i32, layer as i32, y as i32);
                         let adj_index = index as i32 + adjacent_index_offset;
                         let exists = chunk.ids[index] != 0 && !(adj_index >= 0 && adj_index < 16*16*16 && chunk.ids[adj_index as usize] != 0);
-                        input_quads.push(InputQuad { x, y, exists, done: false });
+                        input_quads.push(InputQuad { x, y, exists, done: false, block_id: chunk.ids[index] as usize });
                     },
                     QuadFacing::Front | QuadFacing::Back => {
                         let index = Chunk::xyz_to_i(x as i32, y as i32, layer as i32);
                         let adj_index = index as i32 + adjacent_index_offset;
                         let exists = chunk.ids[index] != 0 && !(adj_index >= 0 && adj_index < 16*16*16 && chunk.ids[adj_index as usize] != 0);
-                        input_quads.push(InputQuad { x, y, exists, done: false });
+                        input_quads.push(InputQuad { x, y, exists, done: false, block_id: chunk.ids[index] as usize });
                     }
                 }
             }
@@ -75,7 +75,7 @@ impl MeshSimplifier {
             let mut q = input_quads.get_mut(i).unwrap().clone();
             if current_quad.is_none() {
                 if q.exists && !q.done {
-                    current_quad = Some(OutputQuad { x: q.x, y: q.y, w: 1, h: 1, width_done: false });
+                    current_quad = Some(OutputQuad { x: q.x, y: q.y, w: 1, h: 1, width_done: false, block_id: q.block_id });
                     q.done = true;
                 }
                 i += 1;
@@ -86,7 +86,7 @@ impl MeshSimplifier {
                 // is quad on the same row?
                 if q.x > current.x {
                     // moving right, check for quad
-                    if q.exists && !q.done {
+                    if q.exists && !q.done && q.block_id == current.block_id {
                         q.done = true;
                         current.w += 1;
                     }
@@ -108,7 +108,7 @@ impl MeshSimplifier {
                         let x_max = current.x + current.w;
                         let mut ok = true;
                         for x in x_min..x_max {
-                            if !input_quads[y*16+x].exists || input_quads[y*16+x].done {
+                            if !input_quads[y*16+x].exists || input_quads[y*16+x].done || input_quads[y*16+x].block_id != current.block_id {
                                 ok = false;
                                 break;
                             }

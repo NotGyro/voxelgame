@@ -15,6 +15,8 @@ layout(set = 0, binding = 1) uniform Data {
     mat4 view;
     mat4 proj;
     vec3 view_pos;
+    float specular_exponent;
+    float specular_strength;
 } uniforms;
 
 
