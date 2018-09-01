@@ -152,7 +152,7 @@ impl SkyboxRenderPipeline {
             .begin_render_pass(
                 self.framebuffers.as_ref().unwrap()[image_num].clone(), false,
                 vec![[0.0, 0.0, 0.0, 1.0].into(), 1f32.into()]).unwrap()
-            .draw_indexed(self.vulkan_pipeline.clone(), DynamicState {
+            .draw_indexed(self.vulkan_pipeline.clone(), &DynamicState {
                 line_width: None,
                 viewports: Some(vec![Viewport {
                     origin: [0.0, 0.0],

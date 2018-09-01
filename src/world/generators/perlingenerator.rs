@@ -22,7 +22,7 @@ impl PerlinGenerator {
 
         PerlinGenerator {
             perlin,
-            scale: 0.005126,
+            scale: 0.008126,
             offset: 0.26378,
             block_type_noise,
             block_type_scale: 0.063647,

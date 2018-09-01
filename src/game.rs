@@ -31,7 +31,7 @@ pub struct Game {
 
 impl Game {
     pub fn new() -> Game {
-        let instance = Instance::new(None, &::vulkano_win::required_extensions(), &[]).expect("failed to create instance");
+        let instance = Instance::new(None, &::vulkano_win::required_extensions(), None).expect("failed to create instance");
         let events_loop = EventsLoop::new();
         let surface = WindowBuilder::new().build_vk_surface(&events_loop, instance.clone()).unwrap();
         let renderer = Renderer::new(instance.clone(), surface.clone());

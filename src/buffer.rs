@@ -309,8 +309,8 @@ unsafe impl<T: ?Sized, A> BufferAccess for CpuAccessibleBufferAutoPool<T, A>
     }
 
     #[inline]
-    fn conflict_key(&self) -> u64 {
-        self.inner.key()
+    fn conflict_key(&self) -> (u64, usize) {
+        (self.inner.key(), 0)
     }
 
     #[inline]
