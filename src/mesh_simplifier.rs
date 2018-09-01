@@ -16,7 +16,7 @@ impl MeshSimplifier {
     pub fn generate_mesh(chunk: &Chunk) -> Vec<(QuadFacing, usize, Vec<OutputQuad>)> {
         let mut output = Vec::new();
 
-        for layer in 0..15 {
+        for layer in 0..16 {
             output.push((QuadFacing::Left, layer, MeshSimplifier::generate_slice(chunk, QuadFacing::Left, layer)));
             output.push((QuadFacing::Right, layer, MeshSimplifier::generate_slice(chunk, QuadFacing::Right, layer)));
 
@@ -53,13 +53,15 @@ impl MeshSimplifier {
                     QuadFacing::Top | QuadFacing::Bottom => {
                         let index = Chunk::xyz_to_i(x as i32, layer as i32, y as i32);
                         let adj_index = index as i32 + adjacent_index_offset;
-                        let exists = chunk.ids[index] != 0 && !(adj_index >= 0 && adj_index < 16*16*16 && chunk.ids[adj_index as usize] != 0);
+                        let mut exists = chunk.ids[index] != 0 && !(adj_index >= 0 && adj_index < 16*16*16 && chunk.ids[adj_index as usize] != 0);
+                        if (adj_index / 16) % 16 == 0 { exists = true; }
                         input_quads.push(InputQuad { x, y, exists, done: false, block_id: chunk.ids[index] as usize });
                     },
                     QuadFacing::Front | QuadFacing::Back => {
                         let index = Chunk::xyz_to_i(x as i32, y as i32, layer as i32);
                         let adj_index = index as i32 + adjacent_index_offset;
-                        let exists = chunk.ids[index] != 0 && !(adj_index >= 0 && adj_index < 16*16*16 && chunk.ids[adj_index as usize] != 0);
+                        let mut exists = chunk.ids[index] != 0 && !(adj_index >= 0 && adj_index < 16*16*16 && chunk.ids[adj_index as usize] != 0);
+                        if adj_index % 16 == 0 { exists = true; }
                         input_quads.push(InputQuad { x, y, exists, done: false, block_id: chunk.ids[index] as usize });
                     }
                 }
@@ -127,9 +129,10 @@ impl MeshSimplifier {
                 continue;
             }
             i += 1;
-            // if i == 16*16, loop ends without adding quad
+            // when i == 16*16, loop would end without adding quad
             if i == 16*16 {
                 output_quads.push(current.clone());
+                break;
             }
             current_quad = Some(current);
         }
