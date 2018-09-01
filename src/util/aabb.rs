@@ -1,3 +1,10 @@
+//! Axis-aligned bounding box.
+//!
+//! Represented by a cuboid defined by two points. As long as the
+//! `set_*` functions are used, the `lower` point will be less than or equal to the `upper` point
+//! for any axis.
+
+
 use cgmath::Point3;
 
 

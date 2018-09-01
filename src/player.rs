@@ -63,7 +63,7 @@ impl Player {
         Transform {
             position: self.position.clone(),
             rotation: Quaternion::from(Euler { x: Deg(-self.pitch as f32), y: Deg(self.yaw as f32), z: Deg(0f32) }),
-            scale: 1.0
+            scale: Vector3::new(1.0, 1.0, 1.0)
         }
     }
 }

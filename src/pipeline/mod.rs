@@ -1,3 +1,6 @@
+//! Rendering pipeline types.
+
+
 pub mod chunk_pipeline;
 pub mod lines_pipeline;
 pub mod skybox_pipeline;
