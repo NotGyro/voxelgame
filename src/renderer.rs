@@ -4,7 +4,6 @@ use std::collections::VecDeque;
 use cgmath::{EuclideanSpace, Matrix4, Vector4};
 
 use vulkano::buffer::BufferUsage;
-use vulkano::command_buffer::CommandBufferExecFuture;
 use vulkano::device::{Device, DeviceExtensions, Queue};
 use vulkano::format::D32Sfloat;
 use vulkano::image::attachment::AttachmentImage;

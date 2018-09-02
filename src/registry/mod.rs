@@ -1,3 +1,6 @@
+//! Global registry types.
+
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::path::Path;
@@ -9,6 +12,7 @@ use vulkano::device::Queue;
 use ::world::Dimension;
 
 
+/// Global texture registry.
 pub struct TextureRegistry {
     textures: HashMap<String, Arc<ImmutableImage<R8G8B8A8Srgb>>>
 }
@@ -22,6 +26,7 @@ impl TextureRegistry {
     }
 
 
+    /// Loads the textures from disk, and onto the GPU.
     pub fn load(&mut self, queue: Arc<Queue>) {
         let tex_names = [ String::from("stone"), String::from("dirt"), String::from("grass") ];
 
@@ -45,6 +50,7 @@ impl TextureRegistry {
     }
 
 
+    /// Gets a handle to the texture with the given name, or None if one couldn't be found.
     pub fn get(&self, name: &str) -> Option<Arc<ImmutableImage<R8G8B8A8Srgb>>> {
         match self.textures.get(name) {
             Some(arc) => Some(arc.clone()),
@@ -54,6 +60,7 @@ impl TextureRegistry {
 }
 
 
+/// Global dimension registry.
 pub struct DimensionRegistry {
     pub dimensions: HashMap<u32, Dimension>
 }
@@ -67,6 +74,7 @@ impl DimensionRegistry {
     }
 
 
+    /// Gets the dimension with the given id, or None if one couldn't be found.
     pub fn get(&mut self, id: u32) -> Option<&mut Dimension> {
         self.dimensions.get_mut(&id)
     }

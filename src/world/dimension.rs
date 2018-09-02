@@ -1,3 +1,6 @@
+//! A dimension.
+
+
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicUsize;
 
@@ -9,6 +12,7 @@ use world::generators::{WorldGenerator, PerlinGenerator};
 use world::chunk::CHUNK_STATE_DIRTY;
 
 
+/// A dimension.
 pub struct Dimension {
     pub chunks: HashMap<(i32, i32, i32), (Arc<RwLock<Chunk>>, Arc<AtomicUsize>)>
 }
@@ -22,6 +26,8 @@ impl Dimension {
     }
 
 
+    /// Adds new chunks as the player moves closer to them, and removes old chunks as the player
+    /// moves away.
     pub fn load_unload_chunks(&mut self, player_pos: Point3<f32>, queue: &mut LineRenderQueue) {
         const CHUNK_RADIUS: i32 = 2;
         const CHUNK_DISTANCE: f32 = CHUNK_RADIUS as f32 * 2.0 * 16.0;

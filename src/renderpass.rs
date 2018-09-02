@@ -1,8 +1,12 @@
+//! Custom RenderPass types.
+
+
 use vulkano::framebuffer::{RenderPassDesc, LayoutAttachmentDescription, LayoutPassDescription, LayoutPassDependencyDescription, LoadOp, StoreOp, RenderPassDescClearValues};
 use vulkano::image::ImageLayout;
 use vulkano::format::{Format, ClearValue};
 
 
+/// Render pass that uses a single color attachment and a depth buffer, and clears both before it runs.
 pub struct RenderPassClearedColorWithDepth {
     pub color_format: Format
 }
@@ -62,6 +66,8 @@ unsafe impl RenderPassDescClearValues<Vec<ClearValue>> for RenderPassClearedColo
     }
 }
 
+
+/// Render pass that uses a single color attachment and a depth buffer, and does not clear them before it runs.
 pub struct RenderPassUnclearedColorWithDepth {
     pub color_format: Format
 }

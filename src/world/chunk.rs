@@ -1,3 +1,6 @@
+//! A single chunk of blocks.
+
+
 use std::sync::Arc;
 use std::collections::HashSet;
 
@@ -10,8 +13,11 @@ use mesh_simplifier::{MeshSimplifier, QuadFacing};
 use memory::pool::AutoMemoryPool;
 
 
+/// State used for multithreaded chunk loading. Chunk is dirty and needs to be generated.
 pub static CHUNK_STATE_DIRTY: usize = 0;
+/// State used for multithreaded chunk loading. Chunk is currently being generated.
 pub static CHUNK_STATE_WRITING: usize = 1;
+/// State used for multithreaded chunk loading. Chunk is finished being generated.
 pub static CHUNK_STATE_CLEAN: usize = 2;
 
 
@@ -55,11 +61,13 @@ impl Chunk {
     }
 
 
+    /// Replaces the data inside a chunk all at once.
     pub fn replace_data(&mut self, data: &[u8; 16*16*16]) {
         self.ids = *data;
     }
 
 
+    /// Generates a mesh for the chunk, using [MeshSimplifier].
     pub fn generate_mesh(&mut self, device: Arc<Device>, memory_pool: AutoMemoryPool) {
         let quad_lists = MeshSimplifier::generate_mesh(self);
 

@@ -1,3 +1,6 @@
+//! See crate [vulkano_win](https://docs.rs/vulkano-win/0.10.0/vulkano_win/).
+
+
 use std::borrow::Borrow;
 use std::error;
 use std::fmt;

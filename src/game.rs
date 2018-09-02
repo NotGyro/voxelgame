@@ -1,3 +1,6 @@
+//! Main type for the game. `Game::new().run()` runs the game.
+
+
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::thread;
@@ -21,6 +24,7 @@ use player::Player;
 use world::chunk::{CHUNK_STATE_DIRTY, CHUNK_STATE_WRITING, CHUNK_STATE_CLEAN};
 
 
+/// Main type for the game. `Game::new().run()` runs the game.
 pub struct Game {
     events_loop: EventsLoop,
     surface: Arc<Surface<Window>>,
@@ -33,6 +37,7 @@ pub struct Game {
 
 
 impl Game {
+    /// Creates a new `Game`.
     pub fn new() -> Game {
         let instance = Instance::new(None, &::vulkano_win::required_extensions(), None).expect("failed to create instance");
         let events_loop = EventsLoop::new();
@@ -62,6 +67,7 @@ impl Game {
     }
 
 
+    /// Runs the main game loop.
     pub fn run(&mut self) {
         let mut running = true;
         while running {
@@ -70,6 +76,7 @@ impl Game {
     }
 
 
+    /// Main game loop.
     pub fn update(&mut self) -> bool {
         let mut keep_running = true;
 

@@ -1,8 +1,12 @@
+//! Simple world generator using perlin noise.
+
+
 use noise::{NoiseFn, Perlin, Seedable};
 use super::WorldGenerator;
 use ::world::Chunk;
 
 
+/// Simple world generator using perlin noise.
 pub struct PerlinGenerator {
     perlin: Perlin,
     scale: f64,
@@ -13,6 +17,7 @@ pub struct PerlinGenerator {
 
 
 impl PerlinGenerator {
+    /// Creates a new `PerlinGenerator`
     pub fn new() -> PerlinGenerator {
         let perlin = Perlin::new();
         perlin.set_seed(1);
