@@ -124,10 +124,10 @@ impl Game {
 
         self.player.update(dt, &self.input_state);
 
-        self.dimension_registry.get(0).unwrap().load_unload_chunks(self.player.position.clone(), &mut self.renderer.line_queue);
+        self.dimension_registry.get(0).unwrap().load_unload_chunks(self.player.position.clone(), &mut self.renderer.render_queue.lines);
 
         {
-            let line_queue = &mut self.renderer.line_queue;
+            let line_queue = &mut self.renderer.render_queue.lines;
             if line_queue.chunks_changed {
                 let mut verts = Vec::new();
                 let mut idxs = Vec::new();
@@ -153,7 +153,7 @@ impl Game {
             }
         }
 
-        self.renderer.chunk_mesh_queue.clear();
+        self.renderer.render_queue.chunk_meshes.clear();
         for (_, (ref mut chunk, ref mut state)) in self.dimension_registry.get(0).unwrap().chunks.iter_mut() {
             let is_dirty = state.load(Ordering::Relaxed) == CHUNK_STATE_DIRTY;
             if is_dirty {
@@ -174,7 +174,7 @@ impl Game {
             let is_ready = state.load(Ordering::Relaxed) == CHUNK_STATE_CLEAN;
             if is_ready {
                 let chunk_lock = chunk.read().unwrap();
-                self.renderer.chunk_mesh_queue.append(&mut chunk_lock.mesh.queue());
+                self.renderer.render_queue.chunk_meshes.append(&mut chunk_lock.mesh.queue());
             }
         }
 

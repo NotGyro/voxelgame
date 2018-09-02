@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::collections::VecDeque;
 
 use cgmath::{EuclideanSpace, Matrix4, Vector4};
 
@@ -16,7 +17,7 @@ use util::{Camera, Transform};
 use geometry::{VertexGroup, Material};
 use registry::TextureRegistry;
 use pool::AutoMemoryPool;
-use pipeline::{ChunkRenderPipeline, LinesRenderPipeline, SkyboxRenderPipeline};
+use pipeline::{RenderPipelineAbstract, SkyboxRenderPipeline, ChunkRenderPipeline, LinesRenderPipeline, PipelineCbCreateInfo};
 
 use buffer::CpuAccessibleBufferAutoPool;
 use geometry::VertexPositionColorAlpha;
@@ -28,6 +29,12 @@ pub static VULKAN_CORRECT_CLIP: Matrix4<f32> = Matrix4 {
     z: Vector4 { x: 0.0, y:  0.0, z: 0.5, w: 0.5 },
     w: Vector4 { x: 0.0, y:  0.0, z: 0.0, w: 1.0 }
 };
+
+
+pub struct RenderQueue {
+    pub chunk_meshes: Vec<ChunkRenderQueueEntry>,
+    pub lines: LineRenderQueue
+}
 
 
 pub struct ChunkRenderQueueEntry {
@@ -53,12 +60,9 @@ pub struct Renderer {
     images: Vec<Arc<SwapchainImage<Window>>>,
     depth_buffer: Arc<AttachmentImage<D32Sfloat>>,
     recreate_swapchain: bool,
-    tex_registry: TextureRegistry,
-    skybox_pipeline: SkyboxRenderPipeline,
-    chunk_pipeline: ChunkRenderPipeline,
-    lines_pipeline: LinesRenderPipeline,
-    pub chunk_mesh_queue: Vec<ChunkRenderQueueEntry>,
-    pub line_queue: LineRenderQueue,
+    tex_registry: Arc<TextureRegistry>,
+    pipelines: Vec<Box<RenderPipelineAbstract>>,
+    pub render_queue: RenderQueue
 }
 
 
@@ -105,14 +109,16 @@ impl Renderer {
 
         let depth_buffer = ::vulkano::image::attachment::AttachmentImage::transient(device.clone(), dimensions, D32Sfloat).unwrap();
 
-        let mut registry = TextureRegistry::new();
-        registry.load(queue.clone());
+        let mut tex_registry = TextureRegistry::new();
+        tex_registry.load(queue.clone());
+        let tex_registry = Arc::new(tex_registry);
 
         let memory_pool = AutoMemoryPool::new(device.clone());
 
-        let skybox_pipeline = SkyboxRenderPipeline::new(&swapchain, &device, &queue, &memory_pool);
-        let chunk_pipeline = ChunkRenderPipeline::new(&swapchain, &device);
-        let lines_pipeline = LinesRenderPipeline::new(&swapchain, &device);
+        let mut pipelines: Vec<Box<RenderPipelineAbstract>> = Vec::new();
+        pipelines.push(Box::new(SkyboxRenderPipeline::new(&swapchain, &device, &queue, &memory_pool)));
+        pipelines.push(Box::new(ChunkRenderPipeline::new(&swapchain, &device)));
+        pipelines.push(Box::new(LinesRenderPipeline::new(&swapchain, &device)));
 
         let chunk_lines_vertex_buffer = CpuAccessibleBufferAutoPool::<[VertexPositionColorAlpha]>::from_iter(device.clone(), memory_pool.clone(), BufferUsage::all(), Vec::new().iter().cloned()).expect("failed to create buffer");
         let chunk_lines_index_buffer = CpuAccessibleBufferAutoPool::<[u32]>::from_iter(device.clone(), memory_pool.clone(), BufferUsage::all(), Vec::new().iter().cloned()).expect("failed to create buffer");
@@ -126,15 +132,15 @@ impl Renderer {
             images,
             depth_buffer,
             recreate_swapchain: false,
-            tex_registry: registry,
-            skybox_pipeline,
-            chunk_pipeline,
-            lines_pipeline,
-            chunk_mesh_queue: Vec::new(),
-            line_queue: LineRenderQueue {
-                chunk_lines_vertex_buffer,
-                chunk_lines_index_buffer,
-                chunks_changed: false,
+            tex_registry,
+            pipelines,
+            render_queue: RenderQueue {
+                chunk_meshes: Vec::new(),
+                lines: LineRenderQueue {
+                    chunk_lines_vertex_buffer,
+                    chunk_lines_index_buffer,
+                    chunks_changed: false
+                }
             }
         }
     }
@@ -168,24 +174,18 @@ impl Renderer {
             let new_depth_buffer = AttachmentImage::transient(self.device.clone(), dimensions, D32Sfloat).unwrap();
             ::std::mem::replace(&mut self.depth_buffer, new_depth_buffer);
 
-            self.skybox_pipeline.remove_framebuffers();
-            self.chunk_pipeline.remove_framebuffers();
-            self.lines_pipeline.remove_framebuffers();
+            for mut pipeline in self.pipelines.iter_mut() {
+                pipeline.remove_framebuffers();
+            }
 
             self.recreate_swapchain = false;
         }
 
-        if self.skybox_pipeline.framebuffers.is_none() {
-            self.skybox_pipeline.recreate_framebuffers(&self.images, &self.depth_buffer);
-        }
-        if self.chunk_pipeline.framebuffers.is_none() {
-            self.chunk_pipeline.recreate_framebuffers(&self.images, &self.depth_buffer);
-        }
-        if self.lines_pipeline.framebuffers.is_none() {
-            self.lines_pipeline.recreate_framebuffers(&self.images, &self.depth_buffer);
+        for mut pipeline in self.pipelines.iter_mut() {
+            pipeline.recreate_framebuffers_if_none(&self.images, &self.depth_buffer);
         }
 
-        let (image_num, future) = match ::vulkano::swapchain::acquire_next_image(self.swapchain.clone(), None) {
+        let (image_num, mut future) = match ::vulkano::swapchain::acquire_next_image(self.swapchain.clone(), None) {
             Ok(r) => r,
             Err(::vulkano::swapchain::AcquireError::OutOfDate) => {
                 self.recreate_swapchain = true;
@@ -195,14 +195,23 @@ impl Renderer {
             Err(err) => panic!("{:?}", err)
         };
 
-        let skybox_cb = self.skybox_pipeline.build_command_buffer(image_num, &self.queue, dimensions, view_mat, proj_mat);
-        let chunks_cb = self.chunk_pipeline.build_command_buffer(image_num, &self.queue, dimensions, &transform, view_mat, proj_mat, &self.tex_registry, &self.chunk_mesh_queue);
-        let lines_cb = self.lines_pipeline.build_command_buffer(image_num, &self.queue, dimensions, view_mat, proj_mat, &self.line_queue);
+        let mut cbs = VecDeque::new();
+        for pipeline in self.pipelines.iter() {
+            let info = PipelineCbCreateInfo {
+                image_num, dimensions, queue: self.queue.clone(), camera_transform: transform.clone(),
+                view_mat: view_mat.clone(), proj_mat: proj_mat.clone(), tex_registry: self.tex_registry.clone()
+            };
+            cbs.push_back(pipeline.build_command_buffer(info, &self.render_queue));
+        }
 
+        // TODO: make this work generically
+        let cb = cbs.pop_front().unwrap();
+        let future = future.then_execute(self.queue.clone(), cb).unwrap();
+        let cb = cbs.pop_front().unwrap();
+        let future = future.then_execute(self.queue.clone(), cb).unwrap();
+        let cb = cbs.pop_front().unwrap();
+        let future = future.then_execute(self.queue.clone(), cb).unwrap();
         let future = future
-            .then_execute(self.queue.clone(), skybox_cb).unwrap()
-            .then_execute(self.queue.clone(), chunks_cb).unwrap()
-            .then_execute(self.queue.clone(), lines_cb).unwrap()
             .then_swapchain_present(self.queue.clone(), self.swapchain.clone(), image_num)
             .then_signal_fence_and_flush();
 

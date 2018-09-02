@@ -5,20 +5,18 @@ use vulkano::buffer::BufferUsage;
 use vulkano::buffer::cpu_pool::CpuBufferPool;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, AutoCommandBuffer, DynamicState};
 use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
-use vulkano::device::{Device, Queue};
-use vulkano::format::D32Sfloat;
-use vulkano::framebuffer::{FramebufferAbstract, Framebuffer, RenderPass, RenderPassDesc, Subpass};
-use vulkano::image::attachment::AttachmentImage;
-use vulkano::image::swapchain::SwapchainImage;
+use vulkano::device::Device;
+use vulkano::framebuffer::{FramebufferAbstract, RenderPass, RenderPassDesc, Subpass, RenderPassAbstract};
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::swapchain::Swapchain;
 use winit::Window;
 
 use geometry::VertexPositionColorAlpha;
-use renderer::LineRenderQueue;
+use renderer::RenderQueue;
 use renderpass::RenderPassUnclearedColorWithDepth;
 use shader::lines as LinesShaders;
+use super::{RenderPipelineAbstract, PipelineCbCreateInfo};
 
 
 pub struct LinesRenderPipeline {
@@ -61,53 +59,49 @@ impl LinesRenderPipeline {
             uniform_buffer_pool: CpuBufferPool::<LinesShaders::vertex::ty::Data>::new(device.clone(), BufferUsage::all()),
         }
     }
+}
 
 
-    pub fn build_command_buffer(&self, image_num: usize, queue: &Arc<Queue>, dimensions: [u32; 2], view_mat: Matrix4<f32>, proj_mat: Matrix4<f32>, render_queue: &LineRenderQueue) -> AutoCommandBuffer {
+impl RenderPipelineAbstract for LinesRenderPipeline {
+    fn get_framebuffers_mut(&mut self) -> &mut Option<Vec<Arc<FramebufferAbstract + Send + Sync>>> {
+        &mut self.framebuffers
+    }
+
+
+    fn get_renderpass(&self) -> Arc<RenderPassAbstract + Send + Sync> {
+        self.renderpass.clone() as Arc<RenderPassAbstract + Send + Sync>
+    }
+
+
+    fn build_command_buffer(&self, info: PipelineCbCreateInfo, render_queue: &RenderQueue) -> AutoCommandBuffer {
         let descriptor_set;
         let subbuffer = self.uniform_buffer_pool.next(LinesShaders::vertex::ty::Data {
             world: Matrix4::from_scale(1.0).into(),
-            view: view_mat.into(),
-            proj: proj_mat.into(),
+            view: info.view_mat.into(),
+            proj: info.proj_mat.into(),
         }).unwrap();
         descriptor_set = Arc::new(PersistentDescriptorSet::start(self.vulkan_pipeline.clone(), 0)
             .add_buffer(subbuffer).unwrap()
             .build().unwrap()
         );
-
-        AutoCommandBufferBuilder::primary_one_time_submit(self.device.clone(), queue.family())
+        AutoCommandBufferBuilder::primary_one_time_submit(self.device.clone(), info.queue.family())
             .unwrap()
             .begin_render_pass(
-                self.framebuffers.as_ref().unwrap()[image_num].clone(), false,
+                self.framebuffers.as_ref().unwrap()[info.image_num].clone(), false,
                 vec![::vulkano::format::ClearValue::None, ::vulkano::format::ClearValue::None]).unwrap()
             .draw_indexed(self.vulkan_pipeline.clone(), &DynamicState {
                 line_width: None,
                 viewports: Some(vec![Viewport {
                     origin: [0.0, 0.0],
-                    dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+                    dimensions: [info.dimensions[0] as f32, info.dimensions[1] as f32],
                     depth_range: 0.0..1.0,
                 }]),
                 scissors: None,
             },
-                          vec![render_queue.chunk_lines_vertex_buffer.clone()],
-                          render_queue.chunk_lines_index_buffer.clone(),
-                  descriptor_set.clone(), ()).unwrap()
+                          vec![render_queue.lines.chunk_lines_vertex_buffer.clone()],
+                          render_queue.lines.chunk_lines_index_buffer.clone(),
+                          descriptor_set.clone(), ()).unwrap()
             .end_render_pass().unwrap()
             .build().unwrap()
-    }
-
-
-    pub fn remove_framebuffers(&mut self) { self.framebuffers = None; }
-
-
-    pub fn recreate_framebuffers(&mut self, images: &Vec<Arc<SwapchainImage<Window>>>, depth_buffer: &Arc<AttachmentImage<D32Sfloat>>) {
-        let new_framebuffers = Some(images.iter().map(|image| {
-            let arc: Arc<FramebufferAbstract + Send + Sync> = Arc::new(Framebuffer::start(self.renderpass.clone())
-                .add(image.clone()).unwrap()
-                .add(depth_buffer.clone()).unwrap()
-                .build().unwrap());
-            arc
-        }).collect::<Vec<_>>());
-        ::std::mem::replace(&mut self.framebuffers, new_framebuffers);
     }
 }
