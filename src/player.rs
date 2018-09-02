@@ -1,3 +1,6 @@
+//! Type representing the player.
+
+
 use ::util::{Camera, Transform};
 use ::input::InputState;
 use winit::VirtualKeyCode;
@@ -5,16 +8,23 @@ use cgmath::{Point3, Vector3, Quaternion, Matrix4, Euler, Deg, InnerSpace};
 use cgmath::Transform as CgmathTransform;
 
 
+/// Struct representing the player.
 pub struct Player {
+    /// Player's position in space.
     pub position: Point3<f32>,
+    /// Camera the player is looking through.
     pub camera: Camera,
+    /// Pitch (vertical rotation) of the player camera.
     pub pitch: f64,
+    /// Yaw (horizontal rotation) of the player camera.
     pub yaw: f64,
+    /// ID of the dimension the player is currently in.
     pub dimension_id: u32
 }
 
 
 impl Player {
+    /// Creates a new player.
     pub fn new() -> Player {
         Player {
             position: Point3::new(0.0, 0.0, 0.0),
@@ -26,6 +36,7 @@ impl Player {
     }
 
 
+    /// Updates the player. Called every frame in the game loop.
     pub fn update(&mut self, dt: f64, input: &InputState) {
         if input.right_mouse_pressed {
             const MOUSE_SPEED: f64 = 3.0;
@@ -59,6 +70,7 @@ impl Player {
     }
 
 
+    /// Gets a [Transform] for the player from its position, pitch, and yaw.
     pub fn get_transform(&self) -> Transform {
         Transform {
             position: self.position.clone(),

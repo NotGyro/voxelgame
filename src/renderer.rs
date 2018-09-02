@@ -1,3 +1,5 @@
+//! Main renderer.
+
 use std::sync::Arc;
 use std::collections::VecDeque;
 
@@ -23,6 +25,8 @@ use buffer::CpuAccessibleBufferAutoPool;
 use geometry::VertexPositionColorAlpha;
 
 
+/// Matrix to correct vulkan clipping planes and flip y axis.
+/// See [https://matthewwellings.com/blog/the-new-vulkan-coordinate-system/](https://matthewwellings.com/blog/the-new-vulkan-coordinate-system/).
 pub static VULKAN_CORRECT_CLIP: Matrix4<f32> = Matrix4 {
     x: Vector4 { x: 1.0, y:  0.0, z: 0.0, w: 0.0 },
     y: Vector4 { x: 0.0, y: -1.0, z: 0.0, w: 0.0 },
@@ -31,12 +35,14 @@ pub static VULKAN_CORRECT_CLIP: Matrix4<f32> = Matrix4 {
 };
 
 
+/// Queue of all objects to be drawn.
 pub struct RenderQueue {
     pub chunk_meshes: Vec<ChunkRenderQueueEntry>,
     pub lines: LineRenderQueue
 }
 
 
+/// Render queue entry for a single mesh
 pub struct ChunkRenderQueueEntry {
     pub vertex_group: Arc<VertexGroup>,
     pub material: Material,
@@ -44,6 +50,7 @@ pub struct ChunkRenderQueueEntry {
 }
 
 
+/// Render queue for all lines to be drawn.
 pub struct LineRenderQueue {
     pub chunk_lines_vertex_buffer: Arc<CpuAccessibleBufferAutoPool<[VertexPositionColorAlpha]>>,
     pub chunk_lines_index_buffer: Arc<CpuAccessibleBufferAutoPool<[u32]>>,
@@ -51,22 +58,35 @@ pub struct LineRenderQueue {
 }
 
 
+/// Main renderer.
 pub struct Renderer {
+    /// Vulkan device.
     pub device: Arc<Device>,
+    /// Memory pool for memory-managed objects.
     pub memory_pool: AutoMemoryPool,
+    /// Device queue.
     queue: Arc<Queue>,
+    /// Vulkano surface.
     surface: Arc<Surface<Window>>,
+    /// Vulkano swapchain.
     swapchain: Arc<Swapchain<Window>>,
+    /// Swapchain images.
     images: Vec<Arc<SwapchainImage<Window>>>,
+    /// Depth buffer.
     depth_buffer: Arc<AttachmentImage<D32Sfloat>>,
+    /// If true, swapchain needs to be recreated.
     recreate_swapchain: bool,
+    /// Global texture registry
     tex_registry: Arc<TextureRegistry>,
+    /// List of render pipelines.
     pipelines: Vec<Box<RenderPipelineAbstract>>,
+    /// Render queue.
     pub render_queue: RenderQueue
 }
 
 
 impl Renderer {
+    /// Creates a new `Renderer`.
     pub fn new(instance: Arc<Instance>, surface: Arc<Surface<Window>>) -> Renderer {
         let physical = PhysicalDevice::enumerate(&instance).next().expect("no device available");
         let queue = physical.queue_families().find(|&q| q.supports_graphics() &&
@@ -146,6 +166,7 @@ impl Renderer {
     }
 
 
+    /// Draw all objects in the render queue. Called every frame in the game loop.
     pub fn draw(&mut self, camera: &Camera, transform: Transform) {
         let dimensions = match self.surface.window().get_inner_size() {
             Some(::winit::dpi::LogicalSize{ width, height }) => [width as u32, height as u32],

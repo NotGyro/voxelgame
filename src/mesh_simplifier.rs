@@ -1,18 +1,29 @@
+//! Simplified mesh generator.
+
 use world::Chunk;
 
+/// Struct used internally to represent unoptimized quads.
 #[derive(Clone)]
 pub struct InputQuad { x: usize, y: usize, exists: bool, done: bool, pub block_id: usize }
+/// Struct returned as output from the generator; represents quads in an optimized mesh.
 #[derive(Debug, Clone)]
 pub struct OutputQuad { pub x: usize, pub y: usize, pub w: usize, pub h: usize, width_done: bool, pub block_id: usize }
 
+
+/// Cardinal direction a quad is facing.
 pub enum QuadFacing {
     Left, Right, Top, Bottom, Front, Back
 }
 
 
+/// Simplified mesh generator.
+///
+/// Generates a list of quads to render a chunk, optimized using greedy meshing, and with inner faces culled.
 pub struct MeshSimplifier;
 
+
 impl MeshSimplifier {
+    /// Generates a simplified mesh from the given chunk.
     pub fn generate_mesh(chunk: &Chunk) -> Vec<(QuadFacing, usize, Vec<OutputQuad>)> {
         let mut output = Vec::new();
 
@@ -29,6 +40,8 @@ impl MeshSimplifier {
         output
     }
 
+
+    /// Generates one 2d slice of the mesh.
     pub fn generate_slice(chunk: &Chunk, facing: QuadFacing, layer: usize) -> Vec<OutputQuad> {
         // used to mark quads that overlap quads on other layers as non-existent to cull them
         let adjacent_index_offset: i32 = match facing {
