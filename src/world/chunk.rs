@@ -7,7 +7,7 @@ use vulkano::device::Device;
 use geometry::{Mesh, VertexPositionNormalUVColor, VertexGroup, Material};
 use util::Transform;
 use mesh_simplifier::{MeshSimplifier, QuadFacing};
-use pool::AutoMemoryPool;
+use memory::pool::AutoMemoryPool;
 
 
 pub static CHUNK_STATE_DIRTY: usize = 0;

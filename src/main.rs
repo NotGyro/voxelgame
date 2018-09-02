@@ -9,7 +9,7 @@ extern crate winit;
 #[macro_use] extern crate vulkano;
 #[macro_use] extern crate vulkano_shader_derive;
 
-mod allocator;
+mod memory;
 mod buffer;
 mod game;
 mod geometry;
@@ -17,7 +17,6 @@ mod input;
 mod mesh_simplifier;
 mod pipeline;
 mod player;
-mod pool;
 mod registry;
 mod renderer;
 mod renderpass;

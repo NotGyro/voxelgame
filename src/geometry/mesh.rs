@@ -33,7 +33,7 @@ impl Mesh {
 
     /// Returns a render queue object with the information necessary to render the mesh.
     ///
-    /// Stored in [Renderer.chunk_mesh_queue](::renderer::Renderer::chunk_mesh_queue) and used in
+    /// Stored in [Renderer.chunk_mesh_queue](::renderer::Renderer::render_queue) and used in
     /// [ChunkRenderPipeline](::pipeline::chunk_pipeline::ChunkRenderPipeline).
     pub fn queue(&self) -> Vec<ChunkRenderQueueEntry> {
         let mut result = Vec::new();

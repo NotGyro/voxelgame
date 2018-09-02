@@ -36,7 +36,7 @@ use vulkano::memory::CpuAccess as MemCpuAccess;
 use vulkano::memory::pool::{AllocLayout, MappingRequirement, MemoryPool, MemoryPoolAlloc};
 use vulkano::sync::{AccessError, Sharing};
 
-use pool::{AutoMemoryPool, AutoMemoryPoolBlock};
+use memory::pool::{AutoMemoryPool, AutoMemoryPoolBlock};
 
 /// Buffer whose content is accessible by the CPU.
 #[derive(Debug)]

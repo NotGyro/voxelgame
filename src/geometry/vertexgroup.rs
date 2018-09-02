@@ -9,7 +9,7 @@ use vulkano::device::Device;
 
 use buffer::CpuAccessibleBufferAutoPool;
 use geometry::VertexPositionNormalUVColor;
-use pool::AutoMemoryPool;
+use memory::pool::AutoMemoryPool;
 
 
 // TODO: linking vertgroup to material by id field is probably fragile
@@ -20,11 +20,11 @@ use pool::AutoMemoryPool;
 pub struct VertexGroup {
     /// Vertex data. Set this and call [update_vertex_buffer](VertexGroup::update_vertex_buffer) to update the buffer.
     pub vertices: Vec<VertexPositionNormalUVColor>,
-    /// Vertex buffer. Cpu-accessible, managed by [AutoMemoryPool](::pool::AutoMemoryPool).
+    /// Vertex buffer. Cpu-accessible, managed by [AutoMemoryPool](::memory::pool::AutoMemoryPool).
     pub vertex_buffer: Option<Arc<CpuAccessibleBufferAutoPool<[VertexPositionNormalUVColor]>>>,
     /// Index data. Set this and call [update_index_buffer](VertexGroup::update_index_buffer) to update the buffer.
     pub indices: Vec<u32>,
-    /// Index buffer. Cpu-accessible, managed by [AutoMemoryPool](::pool::AutoMemoryPool).
+    /// Index buffer. Cpu-accessible, managed by [AutoMemoryPool](::memory::pool::AutoMemoryPool).
     pub index_buffer: Option<Arc<CpuAccessibleBufferAutoPool<[u32]>>>,
     /// Corresponds to the index of a material in the owning [Mesh](super::Mesh).
     pub material_id: u8,

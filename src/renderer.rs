@@ -17,7 +17,7 @@ use winit::Window;
 use util::{Camera, Transform};
 use geometry::{VertexGroup, Material};
 use registry::TextureRegistry;
-use pool::AutoMemoryPool;
+use memory::pool::AutoMemoryPool;
 use pipeline::{RenderPipelineAbstract, SkyboxRenderPipeline, ChunkRenderPipeline, LinesRenderPipeline, PipelineCbCreateInfo};
 
 use buffer::CpuAccessibleBufferAutoPool;

@@ -1,3 +1,9 @@
+//! Memory pool types.
+//!
+//! [AutoMemoryPool] is a memory managed pool that only allocates new chunks of device memory when
+//! needed, yielding blocks from existing chunks when possible.
+
+
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::hash::BuildHasherDefault;
@@ -18,100 +24,42 @@ use vulkano::memory::pool::StdHostVisibleMemoryTypePool;
 use vulkano::memory::pool::StdHostVisibleMemoryTypePoolAlloc;
 use fnv::FnvHasher;
 
-use allocator::{BlockAllocator, BlockId};
+use super::allocator::{PoolAllocator, BlockAllocator, BlockId};
 
 
-/// Chunk size in bytes
-const CHUNK_SIZE: usize = 1024 * 1024 * 64;
+/// Chunk size for [AutoMemoryPool] in bytes
+pub const AUTO_POOL_CHUNK_SIZE: usize = 1024 * 1024 * 64;
 
 
-#[derive(Debug)]
-pub struct PoolAllocator {
-    pub pool: Arc<StdHostVisibleMemoryTypePool>,
-    pub chunks: HashMap<Arc<AutoMemoryPoolChunk>, Arc<RwLock<BlockAllocator>>>,
-}
-
-
-impl PoolAllocator {
-    pub fn new(pool: Arc<StdHostVisibleMemoryTypePool>) -> PoolAllocator {
-        PoolAllocator {
-            pool,
-            chunks: HashMap::new()
-        }
-    }
-
-
-    pub fn alloc(&mut self, size: usize, alignment: usize, pool: &Arc<AutoMemoryPoolInner>) -> AutoMemoryPoolBlock {
-        for (chunk, mut block_allocator) in self.chunks.iter_mut() {
-            let mut alloc_inner = block_allocator.write().unwrap();
-            if let Some((block_ptr, offset)) = alloc_inner.alloc(size, alignment) {
-                return AutoMemoryPoolBlock {
-                    chunk: chunk.clone(),
-                    allocator: block_allocator.clone(),
-                    size,
-                    offset,
-                    block_id: block_ptr
-                }
-            }
-            // no open spaces in that chunk, try next chunk
-        }
-        // no open spaces in any chunks, need to allocate new chunk
-        let chunk_alloc = StdHostVisibleMemoryTypePool::alloc(&self.pool, CHUNK_SIZE, alignment).unwrap();
-        let mut chunk_id = 1;
-        while self.contains_chunk(chunk_id) {
-            chunk_id += 1;
-        }
-        let chunk = Arc::new(AutoMemoryPoolChunk {
-            alloc: chunk_alloc,
-            pool: pool.clone(),
-            id: chunk_id
-        });
-        let mut block_allocator = BlockAllocator::new(CHUNK_SIZE);
-        let (block_ptr, offset) = block_allocator.alloc(size, alignment).unwrap();
-        // panic on this unwrap means you tried to allocate CHUNK_SIZE on a fresh chunk. CHUNK_SIZE needs to be increased
-        let allocator = Arc::new(RwLock::new(block_allocator));
-        self.chunks.insert(chunk.clone(), allocator.clone());
-        AutoMemoryPoolBlock {
-            chunk: chunk.clone(),
-            allocator,
-            size,
-            offset,
-            block_id: block_ptr
-        }
-    }
-
-    pub fn contains_chunk(&self, chunk_id: usize) -> bool {
-        for (chunk, _) in self.chunks.iter() {
-            if chunk.id == chunk_id {
-                return true;
-            }
-        }
-        false
-    }
-}
-
-
+/// Inner type for [AutoMemoryPool]. Necessary to implement vulkano's `MemoryPool` on an `Arc<T>`.
 #[derive(Debug)]
 pub struct AutoMemoryPoolInner {
     device: Arc<Device>,
 
-    // For each memory type index, stores the associated pool.
-    pools:
-    Arc<Mutex<HashMap<(u32, AllocLayout, MappingRequirement), PoolAllocator, BuildHasherDefault<FnvHasher>>>>,
+    /// For each memory type index, stores the associated `PoolAllocator` which manages that pool.
+    pools: Arc<Mutex<HashMap<(u32, AllocLayout, MappingRequirement), PoolAllocator, BuildHasherDefault<FnvHasher>>>>,
 }
 
-// HACK: using newtype to work around implementing foreign trait on Arc<_>
+
+/// Memory managed pool that only allocates new chunks of device memory when needed, yielding blocks
+/// from existing chunks when possible.
+///
+/// Alloc methods are in [impl MemoryPool for AutoMemoryPool](struct.AutoMemoryPool.html#impl-MemoryPool).
 #[derive(Debug)]
 pub struct AutoMemoryPool(pub Arc<AutoMemoryPoolInner>);
 
+
 impl Clone for AutoMemoryPool {
+    /// `AutoMemoryPool` is just a newtype around `Arc<AutoMemoryPoolInner>`, so it can be easily
+    /// cloned.
     fn clone(&self) -> Self {
         AutoMemoryPool(self.0.clone())
     }
 }
 
+
 impl AutoMemoryPool {
-    /// Creates a new pool.
+    /// Creates a new `AutoMemoryPool`.
     #[inline]
     pub fn new(device: Arc<Device>) -> AutoMemoryPool {
         let cap = device.physical_device().memory_types().len();
@@ -127,6 +75,8 @@ impl AutoMemoryPool {
 unsafe impl MemoryPool for AutoMemoryPool {
     type Alloc = AutoMemoryPoolBlock;
 
+
+    /// Provides a block of memory to use, allocating new chunks when all existing chunks are full.
     fn alloc_generic(&self, memory_type: MemoryType, size: usize, alignment: usize,
                      layout: AllocLayout, map: MappingRequirement)
                      -> Result<AutoMemoryPoolBlock, DeviceMemoryAllocError> {
@@ -154,6 +104,7 @@ unsafe impl MemoryPool for AutoMemoryPool {
     }
 }
 
+
 unsafe impl DeviceOwned for AutoMemoryPool {
     #[inline]
     fn device(&self) -> &Arc<Device> {
@@ -162,11 +113,13 @@ unsafe impl DeviceOwned for AutoMemoryPool {
 }
 
 
+/// Stores information about an allocated chunk of device memory. Blocks are allocated as regions
+/// of one of these chunks.
 #[derive(Debug)]
 pub struct AutoMemoryPoolChunk {
-    alloc: StdHostVisibleMemoryTypePoolAlloc,
-    pool: Arc<AutoMemoryPoolInner>,
-    id: usize
+    pub alloc: StdHostVisibleMemoryTypePoolAlloc,
+    pub pool: Arc<AutoMemoryPoolInner>,
+    pub id: usize
 }
 impl PartialEq for AutoMemoryPoolChunk {
     fn eq(&self, other: &AutoMemoryPoolChunk) -> bool {
@@ -181,13 +134,16 @@ impl ::std::hash::Hash for AutoMemoryPoolChunk {
 }
 
 
+/// Holds information about a single block of allocated memory.
+///
+/// Block is automatically freed from its chunk when `drop` is called.
 #[derive(Debug)]
 pub struct AutoMemoryPoolBlock {
-    chunk: Arc<AutoMemoryPoolChunk>,
-    allocator: Arc<RwLock<BlockAllocator>>,
-    size: usize,
-    offset: usize,
-    block_id: BlockId
+    pub chunk: Arc<AutoMemoryPoolChunk>,
+    pub allocator: Arc<RwLock<BlockAllocator>>,
+    pub size: usize,
+    pub offset: usize,
+    pub block_id: BlockId
 }
 #[allow(dead_code)]
 impl AutoMemoryPoolBlock {

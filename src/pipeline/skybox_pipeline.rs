@@ -17,7 +17,7 @@ use winit::Window;
 
 use buffer::CpuAccessibleBufferAutoPool;
 use geometry::VertexPositionUV;
-use pool::AutoMemoryPool;
+use memory::pool::AutoMemoryPool;
 use renderpass::RenderPassClearedColorWithDepth;
 use renderer::RenderQueue;
 use shader::skybox as SkyboxShaders;
