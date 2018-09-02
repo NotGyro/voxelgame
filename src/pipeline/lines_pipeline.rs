@@ -15,18 +15,10 @@ use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::swapchain::Swapchain;
 use winit::Window;
 
-use buffer::CpuAccessibleBufferAutoPool;
 use geometry::VertexPositionColorAlpha;
-use pool::AutoMemoryPool;
+use renderer::LineRenderQueue;
 use renderpass::RenderPassUnclearedColorWithDepth;
 use shader::lines as LinesShaders;
-
-
-// temp struct for debug drawing lines
-struct LineData {
-    pub vertex_buffer: Arc<CpuAccessibleBufferAutoPool<[VertexPositionColorAlpha]>>,
-    pub index_buffer: Arc<CpuAccessibleBufferAutoPool<[u32]>>,
-}
 
 
 pub struct LinesRenderPipeline {
@@ -35,12 +27,11 @@ pub struct LinesRenderPipeline {
     pub framebuffers: Option<Vec<Arc<FramebufferAbstract + Send + Sync>>>,
     renderpass: Arc<RenderPass<RenderPassUnclearedColorWithDepth>>,
     uniform_buffer_pool: CpuBufferPool<LinesShaders::vertex::ty::Data>,
-    temp_line_data: LineData,
 }
 
 
 impl LinesRenderPipeline {
-    pub fn new(swapchain: &Swapchain<Window>, device: &Arc<Device>, memory_pool: &AutoMemoryPool) -> LinesRenderPipeline {
+    pub fn new(swapchain: &Swapchain<Window>, device: &Arc<Device>) -> LinesRenderPipeline {
         let vs = LinesShaders::vertex::Shader::load(device.clone()).expect("failed to create shader module");
         let fs = LinesShaders::fragment::Shader::load(device.clone()).expect("failed to create shader module");
 
@@ -62,34 +53,17 @@ impl LinesRenderPipeline {
             .build(device.clone())
             .unwrap());
 
-        let mut temp_line_verts = Vec::new();
-        let mut temp_line_idxs = Vec::new();
-        let mut line_idx_offset = 0;
-        for x in 0..8 {
-            for z in 0..8 {
-                temp_line_verts.append(&mut ::util::cube::generate_chunk_debug_line_vertices(x, 0, z, 0.25f32).to_vec());
-                temp_line_idxs.append(&mut ::util::cube::generate_chunk_debug_line_indices(line_idx_offset).to_vec());
-                line_idx_offset += 1;
-            }
-        }
-
-        let temp_line_data = LineData {
-            vertex_buffer: CpuAccessibleBufferAutoPool::<[VertexPositionColorAlpha]>::from_iter(device.clone(), memory_pool.clone(), BufferUsage::all(), temp_line_verts.iter().cloned()).expect("failed to create buffer"),
-            index_buffer: CpuAccessibleBufferAutoPool::<[u32]>::from_iter(device.clone(), memory_pool.clone(), BufferUsage::all(), temp_line_idxs.iter().cloned()).expect("failed to create buffer"),
-        };
-
         LinesRenderPipeline {
             device: device.clone(),
             vulkan_pipeline: pipeline,
             framebuffers: None,
             renderpass,
             uniform_buffer_pool: CpuBufferPool::<LinesShaders::vertex::ty::Data>::new(device.clone(), BufferUsage::all()),
-            temp_line_data,
         }
     }
 
 
-    pub fn build_command_buffer(&self, image_num: usize, queue: &Arc<Queue>, dimensions: [u32; 2], view_mat: Matrix4<f32>, proj_mat: Matrix4<f32>) -> AutoCommandBuffer {
+    pub fn build_command_buffer(&self, image_num: usize, queue: &Arc<Queue>, dimensions: [u32; 2], view_mat: Matrix4<f32>, proj_mat: Matrix4<f32>, render_queue: &LineRenderQueue) -> AutoCommandBuffer {
         let descriptor_set;
         let subbuffer = self.uniform_buffer_pool.next(LinesShaders::vertex::ty::Data {
             world: Matrix4::from_scale(1.0).into(),
@@ -115,9 +89,9 @@ impl LinesRenderPipeline {
                 }]),
                 scissors: None,
             },
-                          vec![self.temp_line_data.vertex_buffer.clone()],
-                          self.temp_line_data.index_buffer.clone(),
-                          descriptor_set.clone(), ()).unwrap()
+                          vec![render_queue.chunk_lines_vertex_buffer.clone()],
+                          render_queue.chunk_lines_index_buffer.clone(),
+                  descriptor_set.clone(), ()).unwrap()
             .end_render_pass().unwrap()
             .build().unwrap()
     }

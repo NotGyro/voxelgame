@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use cgmath::{EuclideanSpace, Matrix4, Vector4};
 
+use vulkano::buffer::BufferUsage;
 use vulkano::device::{Device, DeviceExtensions, Queue};
 use vulkano::format::D32Sfloat;
 use vulkano::image::attachment::AttachmentImage;
@@ -16,6 +17,9 @@ use geometry::{VertexGroup, Material};
 use registry::TextureRegistry;
 use pool::AutoMemoryPool;
 use pipeline::{ChunkRenderPipeline, LinesRenderPipeline, SkyboxRenderPipeline};
+
+use buffer::CpuAccessibleBufferAutoPool;
+use geometry::VertexPositionColorAlpha;
 
 
 pub static VULKAN_CORRECT_CLIP: Matrix4<f32> = Matrix4 {
@@ -33,6 +37,13 @@ pub struct ChunkRenderQueueEntry {
 }
 
 
+pub struct LineRenderQueue {
+    pub chunk_lines_vertex_buffer: Arc<CpuAccessibleBufferAutoPool<[VertexPositionColorAlpha]>>,
+    pub chunk_lines_index_buffer: Arc<CpuAccessibleBufferAutoPool<[u32]>>,
+    pub chunks_changed: bool,
+}
+
+
 pub struct Renderer {
     pub device: Arc<Device>,
     pub memory_pool: AutoMemoryPool,
@@ -47,6 +58,7 @@ pub struct Renderer {
     chunk_pipeline: ChunkRenderPipeline,
     lines_pipeline: LinesRenderPipeline,
     pub chunk_mesh_queue: Vec<ChunkRenderQueueEntry>,
+    pub line_queue: LineRenderQueue,
 }
 
 
@@ -100,7 +112,10 @@ impl Renderer {
 
         let skybox_pipeline = SkyboxRenderPipeline::new(&swapchain, &device, &queue, &memory_pool);
         let chunk_pipeline = ChunkRenderPipeline::new(&swapchain, &device);
-        let lines_pipeline = LinesRenderPipeline::new(&swapchain, &device, &memory_pool);
+        let lines_pipeline = LinesRenderPipeline::new(&swapchain, &device);
+
+        let chunk_lines_vertex_buffer = CpuAccessibleBufferAutoPool::<[VertexPositionColorAlpha]>::from_iter(device.clone(), memory_pool.clone(), BufferUsage::all(), Vec::new().iter().cloned()).expect("failed to create buffer");
+        let chunk_lines_index_buffer = CpuAccessibleBufferAutoPool::<[u32]>::from_iter(device.clone(), memory_pool.clone(), BufferUsage::all(), Vec::new().iter().cloned()).expect("failed to create buffer");
 
         Renderer {
             device,
@@ -116,6 +131,11 @@ impl Renderer {
             chunk_pipeline,
             lines_pipeline,
             chunk_mesh_queue: Vec::new(),
+            line_queue: LineRenderQueue {
+                chunk_lines_vertex_buffer,
+                chunk_lines_index_buffer,
+                chunks_changed: false,
+            }
         }
     }
 
@@ -177,7 +197,7 @@ impl Renderer {
 
         let skybox_cb = self.skybox_pipeline.build_command_buffer(image_num, &self.queue, dimensions, view_mat, proj_mat);
         let chunks_cb = self.chunk_pipeline.build_command_buffer(image_num, &self.queue, dimensions, &transform, view_mat, proj_mat, &self.tex_registry, &self.chunk_mesh_queue);
-        let lines_cb = self.lines_pipeline.build_command_buffer(image_num, &self.queue, dimensions, view_mat, proj_mat);
+        let lines_cb = self.lines_pipeline.build_command_buffer(image_num, &self.queue, dimensions, view_mat, proj_mat, &self.line_queue);
 
         let future = future
             .then_execute(self.queue.clone(), skybox_cb).unwrap()

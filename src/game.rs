@@ -4,12 +4,15 @@ use std::thread;
 use std::time::Instant;
 
 use cgmath::Point3;
+use vulkano::buffer::BufferUsage;
 use vulkano::instance::Instance;
 use vulkano::swapchain::Surface;
 use vulkano_win::VkSurfaceBuild;
 use winit::{EventsLoop, Event, WindowEvent, DeviceEvent};
 use winit::{Window, WindowBuilder};
 
+use buffer::CpuAccessibleBufferAutoPool;
+use geometry::VertexPositionColorAlpha;
 use renderer::Renderer;
 use input::InputState;
 use world::Dimension;
@@ -121,7 +124,34 @@ impl Game {
 
         self.player.update(dt, &self.input_state);
 
-        self.dimension_registry.get(0).unwrap().load_unload_chunks(self.player.position.clone());
+        self.dimension_registry.get(0).unwrap().load_unload_chunks(self.player.position.clone(), &mut self.renderer.line_queue);
+
+        {
+            let line_queue = &mut self.renderer.line_queue;
+            if line_queue.chunks_changed {
+                let mut verts = Vec::new();
+                let mut idxs = Vec::new();
+                let mut index_offset = 0;
+                for (pos, (_, _)) in self.dimension_registry.get(0).unwrap().chunks.iter() {
+                    verts.append(&mut ::util::cube::generate_chunk_debug_line_vertices(pos.0, pos.1, pos.2, 0.25f32).to_vec());
+                    idxs.append(&mut ::util::cube::generate_chunk_debug_line_indices(index_offset).to_vec());
+                    index_offset += 1;
+                }
+                line_queue.chunk_lines_vertex_buffer =
+                    CpuAccessibleBufferAutoPool::<[VertexPositionColorAlpha]>::from_iter(self.renderer.device.clone(),
+                                                                                         self.renderer.memory_pool.clone(),
+                                                                                         BufferUsage::all(),
+                                                                                         verts.iter().cloned())
+                        .expect("failed to create buffer");
+                line_queue.chunk_lines_index_buffer =
+                    CpuAccessibleBufferAutoPool::<[u32]>::from_iter(self.renderer.device.clone(),
+                                                                    self.renderer.memory_pool.clone(),
+                                                                    BufferUsage::all(),
+                                                                    idxs.iter().cloned())
+                        .expect("failed to create buffer");
+                line_queue.chunks_changed = false;
+            }
+        }
 
         self.renderer.chunk_mesh_queue.clear();
         for (_, (ref mut chunk, ref mut state)) in self.dimension_registry.get(0).unwrap().chunks.iter_mut() {
@@ -131,11 +161,11 @@ impl Game {
                 let chunk_arc = chunk.clone();
                 let device_arc = self.renderer.device.clone();
                 let memory_pool_arc = self.renderer.memory_pool.clone();
-                let state_lock = state.clone();
+                let state_arc = state.clone();
                 thread::spawn(move || {
                     let mut chunk_lock = chunk_arc.write().unwrap();
                     chunk_lock.generate_mesh(device_arc, memory_pool_arc);
-                    state_lock.store(CHUNK_STATE_CLEAN, Ordering::Relaxed);
+                    state_arc.store(CHUNK_STATE_CLEAN, Ordering::Relaxed);
                 });
             }
         }

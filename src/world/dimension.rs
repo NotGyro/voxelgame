@@ -3,8 +3,9 @@ use std::sync::atomic::AtomicUsize;
 
 use std::collections::HashMap;
 use cgmath::{Point3, MetricSpace};
-use ::world::Chunk;
-use ::world::generators::{WorldGenerator, PerlinGenerator};
+use renderer::LineRenderQueue;
+use world::Chunk;
+use world::generators::{WorldGenerator, PerlinGenerator};
 use world::chunk::CHUNK_STATE_DIRTY;
 
 
@@ -21,7 +22,7 @@ impl Dimension {
     }
 
 
-    pub fn load_unload_chunks(&mut self, player_pos: Point3<f32>) {
+    pub fn load_unload_chunks(&mut self, player_pos: Point3<f32>, queue: &mut LineRenderQueue) {
         const CHUNK_RADIUS: i32 = 2;
         const CHUNK_DISTANCE: f32 = CHUNK_RADIUS as f32 * 2.0 * 16.0;
         self.chunks.retain(|pos, _| {
@@ -49,6 +50,7 @@ impl Dimension {
                     if dist < CHUNK_DISTANCE {
                         let mut chunk = gen.generate(chunk_pos, 0);
                         self.chunks.insert(chunk_pos, (Arc::new(RwLock::new(chunk)), Arc::new(AtomicUsize::new(CHUNK_STATE_DIRTY))));
+                        queue.chunks_changed = true;
                     }
                 }
             }
