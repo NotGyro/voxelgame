@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 use cgmath::{EuclideanSpace, Matrix4, Vector4};
 
 use vulkano::buffer::BufferUsage;
+use vulkano::command_buffer::CommandBufferExecFuture;
 use vulkano::device::{Device, DeviceExtensions, Queue};
 use vulkano::format::D32Sfloat;
 use vulkano::image::attachment::AttachmentImage;
@@ -185,7 +186,7 @@ impl Renderer {
             pipeline.recreate_framebuffers_if_none(&self.images, &self.depth_buffer);
         }
 
-        let (image_num, mut future) = match ::vulkano::swapchain::acquire_next_image(self.swapchain.clone(), None) {
+        let (image_num, future) = match ::vulkano::swapchain::acquire_next_image(self.swapchain.clone(), None) {
             Ok(r) => r,
             Err(::vulkano::swapchain::AcquireError::OutOfDate) => {
                 self.recreate_swapchain = true;
@@ -204,14 +205,11 @@ impl Renderer {
             cbs.push_back(pipeline.build_command_buffer(info, &self.render_queue));
         }
 
-        // TODO: make this work generically
-        let cb = cbs.pop_front().unwrap();
-        let future = future.then_execute(self.queue.clone(), cb).unwrap();
-        let cb = cbs.pop_front().unwrap();
-        let future = future.then_execute(self.queue.clone(), cb).unwrap();
-        let cb = cbs.pop_front().unwrap();
-        let future = future.then_execute(self.queue.clone(), cb).unwrap();
-        let future = future
+        let mut future_box: Box<GpuFuture> = Box::new(future);
+        for cb in cbs {
+            future_box = Box::new(future_box.then_execute(self.queue.clone(), cb).unwrap());
+        }
+        let future = future_box
             .then_swapchain_present(self.queue.clone(), self.swapchain.clone(), image_num)
             .then_signal_fence_and_flush();
 
