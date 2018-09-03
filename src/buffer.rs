@@ -553,17 +553,3 @@ impl fmt::Display for WriteLockError {
         write!(fmt, "{}", error::Error::description(self))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use buffer::{BufferUsage, CpuAccessibleBufferAutoPool};
-
-    #[test]
-    fn create_empty_buffer() {
-        let (device, queue) = gfx_dev_and_queue!();
-
-        const EMPTY: [i32; 0] = [];
-
-        let _ = CpuAccessibleBufferAutoPool::from_data(device, BufferUsage::all(), EMPTY.iter());
-    }
-}

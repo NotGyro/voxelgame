@@ -13,9 +13,6 @@ use vulkano::memory::pool::StdHostVisibleMemoryTypePool;
 use super::pool::{AutoMemoryPoolChunk, AutoMemoryPoolBlock, AutoMemoryPoolInner, AUTO_POOL_CHUNK_SIZE};
 
 
-// TODO: tests
-
-
 /// ID corresponding to an allocated block.
 #[derive(Debug, Eq, Hash, Clone)]
 pub struct BlockId(pub usize);
@@ -104,6 +101,19 @@ impl BlockAllocator {
     pub fn free(&mut self, ptr: &BlockId) {
         self.allocs.remove(ptr);
     }
+
+
+    /// Test function: returns a `Vec<usize>` representing the virtual arena where each value is set
+    /// to the `BlockId` it is allocated to, or to `0` if it's currently free.
+    fn _test_get_arena(&self) -> Vec<usize> {
+        let mut arena = vec![0; self.size];
+        for (id, range) in self.allocs.iter() {
+            for i in range.clone() {
+                arena[i] = id.0;
+            }
+        }
+        arena
+    }
 }
 
 
@@ -180,5 +190,86 @@ impl PoolAllocator {
             }
         }
         false
+    }
+}
+
+
+// Tests ///////////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(test)]
+mod tests {
+    mod blockallocator {
+        use super::super::BlockAllocator;
+
+        #[test]
+        fn new_allocator_has_empty_pool_of_correct_size() {
+            let alloc = BlockAllocator::new(20);
+            assert_eq!(alloc._test_get_arena(), vec![0; 20]);
+        }
+
+        #[test]
+        fn one_alloc_in_correct_location_and_correct_size() {
+            let mut alloc = BlockAllocator::new(10);
+            alloc.alloc(4, 0).unwrap();
+            assert_eq!(alloc._test_get_arena(), vec![1, 1, 1, 1, 0, 0, 0, 0, 0, 0]);
+        }
+
+        #[test]
+        fn two_allocs_in_correct_locations_and_correct_sizes() {
+            let mut alloc = BlockAllocator::new(10);
+            alloc.alloc(2, 0).unwrap();
+            alloc.alloc(3, 0).unwrap();
+            assert_eq!(alloc._test_get_arena(), vec![1, 1, 2, 2, 2, 0, 0, 0, 0, 0]);
+        }
+
+        #[test]
+        fn free_frees_block_properly() {
+            let mut alloc = BlockAllocator::new(10);
+            let (a, _) = alloc.alloc(2, 0).unwrap();
+            alloc.alloc(3, 0).unwrap();
+            alloc.free(&a);
+            assert_eq!(alloc._test_get_arena(), vec![0, 0, 2, 2, 2, 0, 0, 0, 0, 0]);
+        }
+
+        #[test]
+        fn returns_none_when_full() {
+            let mut alloc = BlockAllocator::new(10);
+            alloc.alloc(5, 0).unwrap();
+            alloc.alloc(5, 0).unwrap();
+            assert_eq!(alloc.alloc(1, 0), None);
+        }
+
+        #[test]
+        fn allocations_respect_alignment() {
+            let mut alloc = BlockAllocator::new(10);
+            alloc.alloc(1, 0).unwrap();
+            alloc.alloc(1, 4).unwrap();
+            assert_eq!(alloc._test_get_arena(), vec![1, 0, 0, 0, 2, 0, 0, 0, 0, 0]);
+        }
+
+        #[test]
+        fn returns_none_when_no_aligned_space_exists() {
+            // should not allow an allocation when a big enough space only exists *unaligned*
+            let mut alloc = BlockAllocator::new(10);
+            alloc.alloc(1, 5).unwrap();
+            alloc.alloc(1, 5).unwrap();
+            assert_eq!(alloc._test_get_arena(), vec![1, 0, 0, 0, 0, 2, 0, 0, 0, 0]);
+            assert_eq!(alloc.alloc(1, 5), None);
+        }
+
+        #[test]
+        fn complex_behavior_test() {
+            let mut alloc = BlockAllocator::new(16);
+            let (a, _) = alloc.alloc(4, 4).unwrap();
+            alloc.alloc(8, 4).unwrap();
+            alloc.alloc(4, 4).unwrap();
+            assert_eq!(alloc._test_get_arena(), vec![1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3]);
+            alloc.free(&a);
+            assert_eq!(alloc._test_get_arena(), vec![0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3]);
+            alloc.alloc(1, 2).unwrap();
+            alloc.alloc(1, 2).unwrap();
+            assert_eq!(alloc._test_get_arena(), vec![1, 0, 4, 0, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3]);
+            assert_eq!(alloc.alloc(1, 4), None);
+        }
     }
 }
