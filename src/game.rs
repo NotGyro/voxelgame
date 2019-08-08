@@ -1,28 +1,50 @@
 //! Main type for the game. `Game::new().run()` runs the game.
 
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Instant;
+use std::collections::HashMap;
 
 use cgmath::Point3;
 use vulkano::buffer::BufferUsage;
 use vulkano::instance::Instance;
 use vulkano::swapchain::Surface;
 use vulkano_win::VkSurfaceBuild;
-use winit::{EventsLoop, Event, WindowEvent, DeviceEvent};
+use winit::{EventsLoop, Event, WindowEvent, DeviceEvent, KeyboardInput, VirtualKeyCode};
 use winit::{Window, WindowBuilder};
 
 use buffer::CpuAccessibleBufferAutoPool;
 use geometry::VertexPositionColorAlpha;
+use geometry::Mesh;
+use geometry::Material;
 use renderer::Renderer;
 use input::InputState;
 use world::Dimension;
 use registry::DimensionRegistry;
 use player::Player;
-use world::chunk::{CHUNK_STATE_DIRTY, CHUNK_STATE_WRITING, CHUNK_STATE_CLEAN};
+use world::dimension::{CHUNK_STATE_DIRTY, CHUNK_STATE_WRITING, CHUNK_STATE_CLEAN};
 
+use mesh_simplifier::*;
+use voxel::voxelmath::*;
+use voxel::voxelstorage::*;
+
+/// Naive implementation of something Future-shaped.
+type PendingMesh = Arc<RwLock<Option<Mesh>>>;
+
+fn poll_pending_mesh(pend : PendingMesh) -> Option<Mesh> {
+    match pend.try_write() {
+        Ok(mut guard) => guard.take(),
+        _ => None,
+    }
+}
+
+fn complete_pending_mesh(pend : PendingMesh, mesh : Mesh) {
+    let mut guard = pend.write().unwrap().replace(mesh);
+}
+
+fn new_pending_mesh() -> PendingMesh { Arc::new(RwLock::new(None)) }
 
 /// Main type for the game. `Game::new().run()` runs the game.
 pub struct Game {
@@ -32,7 +54,9 @@ pub struct Game {
     prev_time: Instant,
     input_state: InputState,
     player: Player,
-    dimension_registry: DimensionRegistry
+    dimension_registry: DimensionRegistry,
+    pending_meshes : Vec<((i32,i32,i32), PendingMesh)>,
+    chunk_meshes: HashMap<(i32,i32,i32), Mesh>,
 }
 
 
@@ -48,12 +72,16 @@ impl Game {
 
         let mut player = Player::new();
         player.position = Point3::new(16.0, 32.0, 16.0);
-        player.yaw = 135.0;
+
+        player.yaw = -135.0;
         player.pitch = -30.0;
 
         let mut dimension_registry = DimensionRegistry::new();
         let dimension = Dimension::new();
         dimension_registry.dimensions.insert(0, dimension);
+
+        let pending_meshes = Vec::new();
+        let chunk_meshes = HashMap::new();
 
         Game {
             events_loop,
@@ -62,7 +90,9 @@ impl Game {
             prev_time: Instant::now(),
             input_state,
             player,
-            dimension_registry
+            dimension_registry,
+            pending_meshes,
+            chunk_meshes,
         }
     }
 
@@ -125,6 +155,15 @@ impl Game {
                         }
                     }
                 },
+                Event::DeviceEvent { event: DeviceEvent::Key(inp), .. }  => {
+                    self.input_state.update_key(inp);
+                    if(inp.virtual_keycode == Some(VirtualKeyCode::Escape)) {
+                        keep_running = false;
+                    }
+                    if(inp.virtual_keycode == Some(VirtualKeyCode::E)) {
+                        println!("{:?}", self.player.position);
+                    }
+                },
                 _ => ()
             }
         }
@@ -132,7 +171,7 @@ impl Game {
         self.player.update(dt, &self.input_state);
 
         self.dimension_registry.get(0).unwrap().load_unload_chunks(self.player.position.clone(), &mut self.renderer.render_queue.lines);
-
+        
         {
             let line_queue = &mut self.renderer.render_queue.lines;
             if line_queue.chunks_changed {
@@ -160,8 +199,11 @@ impl Game {
             }
         }
 
+        let loaded_chunk_list = self.dimension_registry.get(0).unwrap().loaded_chunk_list();
+
+        let chunk_size = self.dimension_registry.get(0).unwrap().chunk_size;
         self.renderer.render_queue.chunk_meshes.clear();
-        for (_, (ref mut chunk, ref mut state)) in self.dimension_registry.get(0).unwrap().chunks.iter_mut() {
+        for (pos, (ref mut chunk, ref mut state)) in self.dimension_registry.get(0).unwrap().chunks.iter_mut() {
             let is_dirty = state.load(Ordering::Relaxed) == CHUNK_STATE_DIRTY;
             if is_dirty {
                 state.store(CHUNK_STATE_WRITING, Ordering::Relaxed);
@@ -169,24 +211,56 @@ impl Game {
                 let device_arc = self.renderer.device.clone();
                 let memory_pool_arc = self.renderer.memory_pool.clone();
                 let state_arc = state.clone();
+
+                let mut mesh_pend = new_pending_mesh();
+                self.pending_meshes.push((*pos, mesh_pend.clone()));
+
+                let chunk_origin = (pos.0 * chunk_size.0 as i32, 
+                            pos.1 * chunk_size.1 as i32, 
+                            pos.2 * chunk_size.2 as i32);
+
+                
                 thread::spawn(move || {
-                    let mut chunk_lock = chunk_arc.write().unwrap();
-                    chunk_lock.generate_mesh(device_arc, memory_pool_arc);
+                    let chunk_lock = chunk_arc.read().unwrap();
+                    let bounds : VoxelRange<i32> = VoxelRange {lower: vpos!(0,0,0), 
+                                        upper: vpos!(chunk_size.0 as i32, chunk_size.1 as i32, chunk_size.2 as i32)}
+                                        .get_shifted(vpos!(chunk_origin.0, chunk_origin.1, chunk_origin.2));
+                    let mut mesh = MeshSimplifier::generate_mesh(&*chunk_lock as &VoxelStorage<u8,u8>, bounds, device_arc, memory_pool_arc).unwrap();
+                    mesh.materials.push(Material { albedo_map_name: String::from(""), specular_exponent: 0.0, specular_strength: 0.6 });
+                    mesh.materials.push(Material { albedo_map_name: String::from("stone"), specular_exponent: 128.0, specular_strength: 1.0 });
+                    mesh.materials.push(Material { albedo_map_name: String::from("dirt"), specular_exponent: 16.0, specular_strength: 0.5 });
+                    mesh.materials.push(Material { albedo_map_name: String::from("grass"), specular_exponent: 64.0, specular_strength: 0.7 });
+                    complete_pending_mesh(mesh_pend.clone(), mesh);
                     state_arc.store(CHUNK_STATE_CLEAN, Ordering::Relaxed);
                 });
             }
         }
-
-        for (_, (chunk, state)) in self.dimension_registry.get(0).unwrap().chunks.iter() {
-            let is_ready = state.load(Ordering::Relaxed) == CHUNK_STATE_CLEAN;
-            if is_ready {
-                let chunk_lock = chunk.read().unwrap();
-                self.renderer.render_queue.chunk_meshes.append(&mut chunk_lock.mesh.queue());
+        let mut new_meshes: Vec<((i32,i32,i32), Mesh)> = Vec::new();
+        // Add any mesh from a task that just finished.
+        self.pending_meshes.retain(|(pos, pending_mesh)| {
+            match poll_pending_mesh(pending_mesh.clone()) {
+                Some(mesh) => { //Mesh is done! Remove it from this list.
+                    new_meshes.push((*pos, mesh));
+                    false
+                }
+                None => true, //Not done yet, keep this around to poll again next time.
             }
+        });
+        for elem in new_meshes.drain(..) {
+            self.chunk_meshes.insert(elem.0, elem.1);
+        }
+
+        // Clean up meshes for chunks that are no longer loaded.
+        self.chunk_meshes.retain(|pos, _ | { loaded_chunk_list.contains(pos) } );
+
+        // Actually add the mesh to our render queue.
+        for mesh in self.chunk_meshes.values_mut() {
+            self.renderer.render_queue.chunk_meshes.append(&mut mesh.queue());
         }
 
         self.renderer.draw(&self.player.camera, self.player.get_transform());
 
+        //println!("{:?}", self.player.get_transform());
         return keep_running;
     }
 }

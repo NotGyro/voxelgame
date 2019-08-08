@@ -2,9 +2,10 @@
 
 
 use noise::{NoiseFn, Perlin, Seedable};
-use super::WorldGenerator;
-use ::world::Chunk;
+use world::generators::WorldGenerator;
 
+use voxel::voxelmath::*;
+use voxel::voxelarray::*;
 
 /// Simple world generator using perlin noise.
 pub struct PerlinGenerator {
@@ -37,24 +38,30 @@ impl PerlinGenerator {
 
 
 impl WorldGenerator for PerlinGenerator {
-    fn generate(&self, pos: (i32, i32, i32), dimension_id: u32) -> Chunk {
-        let mut chunk = Chunk::new(pos, dimension_id);
-        let mut data = [0u8; 16*16*16];
-        for x in 0..16 {
-            for z in 0..16 {
-                let height_norm = self.perlin.get([((pos.0*16 + x) as f64 + self.offset) * self.scale, ((pos.2*16 + z) as f64 + self.offset) * self.scale]) / 2.0 + 0.5;
-                let height_abs = height_norm as f32 * 32.0;
-                for y in 0..16 {
-                    if (pos.1 as f32 * 16.0) + y as f32 <= height_abs {
-                        let block_type_val = self.block_type_noise.get([((pos.0*16 + x) as f64) * self.block_type_scale, ((pos.2*16 + z) as f64) * self.block_type_scale]) / 2.0 + 0.5;
+    fn generate(&self, bounds: VoxelRange<i32>, dimension_id: u32) -> VoxelArray<u8, u8> {
+        let size = bounds.get_size();
+        
+        let num_elements = (size.x * size.y * size.z) as usize;
+        let mut data : Vec<u8> = Vec::with_capacity(num_elements);
+        for i in 0..num_elements { data.push(0); }
+
+        for x in 0..size.x {
+            for z in 0..size.z {
+                let height_norm = self.perlin.get([((bounds.lower.x + x) as f64 + self.offset) * self.scale, 
+                                                    ((bounds.lower.z + z) as f64 + self.offset) * self.scale]) / 2.0 + 0.5;
+                let height_abs = height_norm as f32 * (size.y * 2) as f32;
+                for y in 0..size.y {
+                    if (bounds.lower.y + y) as f32 <= height_abs {
+                        let block_type_val = self.block_type_noise.get([((bounds.lower.x + x) as f64) * self.block_type_scale, 
+                                                                        ((bounds.lower.z + z) as f64) * self.block_type_scale]) / 2.0 + 0.5;
                         let block_id = ((block_type_val * 3.0) + 1.0) as u8;
-                        data[Chunk::xyz_to_i(x, y, z)] =  block_id;
+
+                        data[xyz_to_i(x as usize, y as usize, z as usize, 
+                                        size.x as usize, size.y as usize, size.z as usize)] = block_id;
                     }
                 }
             }
         }
-        chunk.replace_data(&data);
-
-        chunk
+        VoxelArray::load_new(size.x as u8, size.y as u8, size.z as u8, data)
     }
 }

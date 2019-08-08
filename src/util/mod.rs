@@ -2,19 +2,19 @@
 
 
 mod aabb;
+pub mod logger;
 pub use self::aabb::AABB;
 
 use cgmath::{Vector3, Point3, Quaternion, Deg, Matrix4, EuclideanSpace};
 
 
 /// A 3D transform, with position, rotation, and scale.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Transform {
     pub position: Point3<f32>,
     pub rotation: Quaternion<f32>,
     pub scale: Vector3<f32>
 }
-
 
 #[allow(dead_code)]
 impl Transform {

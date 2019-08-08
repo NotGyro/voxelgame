@@ -8,6 +8,10 @@ extern crate smallvec;
 extern crate winit;
 #[macro_use] extern crate vulkano;
 #[macro_use] extern crate vulkano_shader_derive;
+#[macro_use] extern crate lazy_static;
+
+
+#[macro_use] mod voxel;
 
 mod memory;
 mod buffer;
@@ -24,7 +28,6 @@ mod shader;
 mod util;
 mod vulkano_win;
 mod world;
-
 
 fn main() {
     game::Game::new().run();

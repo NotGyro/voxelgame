@@ -46,17 +46,17 @@ impl Player {
             if self.pitch > 89.0 { self.pitch = 89.0; }
 
             let mut move_vec = Vector3::new(0.0, 0.0, 0.0);
-            if input.get_key_down(&VirtualKeyCode::W) { move_vec += Vector3::new(0.0, 0.0, -1.0); }
-            if input.get_key_down(&VirtualKeyCode::S) { move_vec += Vector3::new(0.0, 0.0,  1.0); }
-            if input.get_key_down(&VirtualKeyCode::A) { move_vec += Vector3::new(-1.0, 0.0, 0.0); }
-            if input.get_key_down(&VirtualKeyCode::D) { move_vec += Vector3::new( 1.0, 0.0, 0.0); }
+            if input.get_key_down(VirtualKeyCode::W) { move_vec += Vector3::new(0.0, 0.0, -1.0); }
+            if input.get_key_down(VirtualKeyCode::S) { move_vec += Vector3::new(0.0, 0.0,  1.0); }
+            if input.get_key_down(VirtualKeyCode::A) { move_vec += Vector3::new(-1.0, 0.0, 0.0); }
+            if input.get_key_down(VirtualKeyCode::D) { move_vec += Vector3::new( 1.0, 0.0, 0.0); }
             move_vec = Matrix4::from_angle_y(Deg(-self.yaw as f32)).transform_vector(move_vec);
-            if input.get_key_down(&VirtualKeyCode::Space) { move_vec += Vector3::new(0.0, 1.0, 0.0); }
-            if input.get_key_down(&VirtualKeyCode::LControl) { move_vec += Vector3::new(0.0, -1.0, 0.0); }
+            if input.get_key_down(VirtualKeyCode::Space) { move_vec += Vector3::new(0.0, 1.0, 0.0); }
+            if input.get_key_down(VirtualKeyCode::LControl) { move_vec += Vector3::new(0.0, -1.0, 0.0); }
 
             const MOVE_SPEED: f32 = 5.0;  // units per second
             let mut speed = MOVE_SPEED * dt as f32;
-            if input.get_key_down(&VirtualKeyCode::LShift) { speed *= 5.0; }
+            if input.get_key_down(VirtualKeyCode::LShift) { speed *= 5.0; }
             // can't normalize (0, 0, 0)
             if move_vec.magnitude() == 0.0 {
                 move_vec = move_vec * speed;

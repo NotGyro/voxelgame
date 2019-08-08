@@ -9,6 +9,7 @@ use std::collections::HashSet;
 pub struct InputState {
     keys_held: HashSet<::winit::VirtualKeyCode>,
     pub mouse_delta: (f64, f64),
+    pub mouse_sensitivity: (f64, f64),
     pub right_mouse_pressed: bool
 }
 
@@ -18,14 +19,15 @@ impl InputState {
         InputState {
             keys_held: HashSet::new(),
             mouse_delta: (0.0, 0.0),
+            mouse_sensitivity : (10.0, 10.0),
             right_mouse_pressed: false
         }
     }
 
 
     /// Gets whether a key is currently pressed.
-    pub fn get_key_down(&self, key: &::winit::VirtualKeyCode) -> bool {
-        self.keys_held.contains(key)
+    pub fn get_key_down(&self, key: ::winit::VirtualKeyCode) -> bool {
+        self.keys_held.contains(&key)
     }
 
 
@@ -48,6 +50,6 @@ impl InputState {
 
     /// Adds mouse input. Used in the game update loop.
     pub fn add_mouse_delta(&mut self, delta: (f64, f64)) {
-        self.mouse_delta = (self.mouse_delta.0 + delta.0, self.mouse_delta.1 + delta.1);
+        self.mouse_delta = (self.mouse_delta.0 + delta.0 * self.mouse_sensitivity.0, self.mouse_delta.1 + delta.1 * self.mouse_sensitivity.1);
     }
 }
