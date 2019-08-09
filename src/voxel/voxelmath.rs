@@ -68,6 +68,65 @@ impl USizeAble for usize {
     fn from_usize(val : usize) -> Self { val }    
 }
 
+/// This should panic if you use it on a negative number.
+pub trait ToUnsigned<U> {
+    fn as_unsigned(&self) -> U;
+    fn from_unsigned(val : U) -> Self;
+}
+
+impl ToUnsigned<u8> for i8 {
+    fn as_unsigned(&self) -> u8 {
+        assert!(self >= &0);
+        (*self) as u8
+    }
+    fn from_unsigned(val : u8) -> Self {
+        val as i8
+    }    
+}
+
+impl ToUnsigned<u16> for i16 {
+    fn as_unsigned(&self) -> u16 {
+        assert!(self >= &0);
+        (*self) as u16
+    }
+    fn from_unsigned(val : u16) -> Self {
+        val as i16
+    }
+}
+
+impl ToUnsigned<u32> for i32 {
+    fn as_unsigned(&self) -> u32 {
+        assert!(self >= &0);
+        (*self) as u32
+    }
+    fn from_unsigned(val : u32) -> Self {
+        val as i32
+    }
+}
+impl ToUnsigned<u64> for i64 {
+    fn as_unsigned(&self) -> u64 {
+        assert!(self >= &0);
+        (*self) as u64
+    }
+    fn from_unsigned(val : u64) -> Self {
+        val as i64
+    }
+}
+pub trait ToSigned<S> {
+    fn as_signed(&self) -> S;
+    fn from_signed(val : S) -> Self;
+}
+
+impl <S, U> ToSigned<S> for U where S : ToUnsigned<U>, U : Clone {
+    fn as_signed(&self) -> S { 
+        S::from_unsigned(self.clone())
+    }
+    fn from_signed(val : S) -> Self {
+        val.as_unsigned()
+    }
+}
+
+
 /// A point in Voxel space. (A cell.)
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct VoxelPos<T : Copy + Integer> {
@@ -121,6 +180,21 @@ macro_rules! vpos {
     ($x:expr, $y:expr, $z:expr) => { VoxelPos { x: $x, y: $y, z : $z } };
 }
 
+
+impl <S, U> ToUnsigned<VoxelPos<U>> for VoxelPos<S> 
+    where S : ToUnsigned<U> + Copy + Integer, U : ToSigned<S> + Copy + Integer {
+    fn as_unsigned(&self) -> VoxelPos<U> {
+        vpos!(self.x.as_unsigned(), self.y.as_unsigned(), self.z.as_unsigned())
+    }
+    fn from_unsigned(val : VoxelPos<U>) -> Self {
+        vpos!(S::from_unsigned(val.x), S::from_unsigned(val.y), S::from_unsigned(val.z))
+    }
+}
+
+/// Describes the dimensions in voxel units of any arbitrary thing.
+/// Functionally identical to VoxelPos, but it's useful to keep track of which is which.
+pub type VoxelSize<T> = VoxelPos<T>;
+
 /// Represents any rectangular cuboid in voxel space.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct VoxelRange<T : Copy + Integer> {
@@ -128,15 +202,29 @@ pub struct VoxelRange<T : Copy + Integer> {
 }
 
 impl <T> VoxelRange<T> where T : Copy + Integer {
+    pub fn get_validated_lower(&self) -> VoxelPos<T> {
+        vpos!(cmp::min(self.upper.x, self.lower.x), cmp::min(self.upper.y, self.lower.y), cmp::min(self.upper.z, self.lower.z))
+    }
+    pub fn get_validated_upper(&self) -> VoxelPos<T> {
+        vpos!(cmp::max(self.upper.x, self.lower.x), cmp::max(self.upper.y, self.lower.y), cmp::max(self.upper.z, self.lower.z))
+    }
     /// Make sure that the coordinates in upper are higher numbers than the coordinates in lower and vice-versa
+    pub fn get_validated(&self) -> VoxelRange<T> {
+        VoxelRange{lower: self.get_validated_lower(), upper: self.get_validated_upper()}
+    }
     pub fn validate(&mut self) {
-        let new_upper = vpos!(cmp::max(self.upper.x, self.lower.x), cmp::max(self.upper.y, self.lower.y), cmp::max(self.upper.z, self.lower.z));
-        let new_lower = vpos!(cmp::min(self.upper.x, self.lower.x), cmp::min(self.upper.y, self.lower.y), cmp::min(self.upper.z, self.lower.z));
-        self.upper = new_upper;
-        self.lower = new_lower;
+        let validated = self.get_validated().clone();
+        self.lower = validated.lower;
+        self.upper = validated.upper;
     }
     pub fn new(low : VoxelPos<T>, high : VoxelPos<T>) -> Self {
         let mut range = VoxelRange{lower: low, upper: high};
+        range.validate();
+        range
+    }
+    /// Construct a voxel range from origin + size.
+    pub fn new_origin_size(origin : VoxelPos<T>, size : VoxelSize<T>) -> Self {
+        let mut range = VoxelRange{lower: origin, upper: origin+size};
         range.validate();
         range
     }
@@ -206,6 +294,13 @@ impl <T> VoxelRange<T> where T : Copy + Integer {
          ( point.y >= self.lower.y ) && ( point.y < self.upper.y ) &&
          ( point.z >= self.lower.z ) && ( point.z < self.upper.z )
     }
+    /// Take a position in "world" space and return an offset from self.lower, telling you how far the point is from our origin.
+    /// Returns None if this is not a local point.
+    pub fn get_local(&self, point : VoxelPos<T>) -> Option<VoxelPos<T>> {
+        if ! self.contains(point) { return None; }
+        let validated_lower = self.get_validated_lower();
+        Some(point - validated_lower)
+    }
     /// Gives you the furthest position inside this VoxelRange along the direction you provide.
     pub fn get_bound(&self, direction : VoxelAxis) -> T {
         match direction {
@@ -219,7 +314,7 @@ impl <T> VoxelRange<T> where T : Copy + Integer {
     }
 
     /// Returns the size_x, size_y, and size_z of this range.
-    pub fn get_size(&self) -> VoxelPos<T> {
+    pub fn get_size(&self) -> VoxelSize<T> {
         let new_upper = vpos!(cmp::max(self.upper.x, self.lower.x), cmp::max(self.upper.y, self.lower.y), cmp::max(self.upper.z, self.lower.z));
         let new_lower = vpos!(cmp::min(self.upper.x, self.lower.x), cmp::min(self.upper.y, self.lower.y), cmp::min(self.upper.z, self.lower.z));
         
@@ -234,6 +329,40 @@ impl <T> VoxelRange<T> where T : Copy + Integer {
             edge = edge - T::one();
         }
         return point.coord_for_axis(side.into()) == edge;
+    }
+}
+
+pub trait VoxelRangeUnsigner<S : ToUnsigned<U> + Copy + Integer, U : ToSigned<S> + Copy + Integer> {
+    type MARKERHACK;
+    /// Take a position in "world" space and return an offset from self.lower, telling you how far the point is from our origin.
+    /// Returns None if this is not a local point.
+    /// Converts to unsigned, sicne we can guarantee the offset is positive here - 
+    /// it returns the offset from self.lower, and guarantees this point is within our range
+    /// which means that point is always higher than self.lower 
+    fn get_local_unsigned(&self, point : VoxelPos<S>) -> Option<VoxelPos<U>>;
+    /// Size is a scalar, it can only be positive - it is the amount that self.upper is further from self.lower.
+    fn get_size_unsigned(&self) -> VoxelSize<U>;
+}
+
+impl <S, U> VoxelRangeUnsigner<S, U> for VoxelRange<S> 
+    where S : ToUnsigned<U> + Copy + Integer, U : ToSigned<S> + Copy + Integer {
+    type MARKERHACK = ();
+    /// Take a position in "world" space and return an offset from self.lower, telling you how far the point is from our origin.
+    /// Returns None if this is not a local point.
+    /// Converts to unsigned, sicne we can guarantee the offset is positive here - 
+    /// it returns the offset from self.lower, and guarantees this point is within our range
+    /// which means that point is always higher than self.lower 
+    fn get_local_unsigned(&self, point : VoxelPos<S>) -> Option<VoxelPos<U>> {
+        if ! self.contains(point) { return None; }
+        let validated_lower = self.get_validated_lower().as_unsigned();
+        Some(point.as_unsigned() - validated_lower)
+    }
+    /// Size is a scalar, it can only be positive - it is the amount that self.upper is further from self.lower.
+    fn get_size_unsigned(&self) -> VoxelSize<U> {
+        let new_upper = vpos!(cmp::max(self.upper.x, self.lower.x), cmp::max(self.upper.y, self.lower.y), cmp::max(self.upper.z, self.lower.z));
+        let new_lower = vpos!(cmp::min(self.upper.x, self.lower.x), cmp::min(self.upper.y, self.lower.y), cmp::min(self.upper.z, self.lower.z));
+        
+        (new_upper - new_lower).as_unsigned()
     }
 }
 
@@ -535,21 +664,21 @@ impl <T> VoxelPos<T> where T : Copy + Integer + Unsigned {
         match direction {
             VoxelAxis::PosiX => return Ok(VoxelPos{x : self.x + T::one(), y : self.y, z : self.z }),
             VoxelAxis::NegaX => {
-                if(self.x == T::zero()) {
+                if self.x == T::zero() {
                     return Err(UnsignedUnderflowError{direction : direction});
                 }
                 return Ok(VoxelPos{x : self.x - T::one(), y : self.y, z : self.z });
             },
             VoxelAxis::PosiY => return Ok(VoxelPos{x : self.x, y : self.y + T::one(), z : self.z }),
             VoxelAxis::NegaY => {
-                if(self.y == T::zero()) {
+                if self.y == T::zero() {
                     return Err(UnsignedUnderflowError{direction : direction});
                 }
                 return Ok( VoxelPos{x : self.x, y : self.y - T::one(), z : self.z });
             },
             VoxelAxis::PosiZ => return Ok(VoxelPos{x : self.x, y : self.y, z : self.z + T::one() }),
             VoxelAxis::NegaZ => {
-                if(self.z == T::zero()) {
+                if self.z == T::zero() {
                     return Err(UnsignedUnderflowError{direction : direction});
                 }
                 return Ok(VoxelPos{x : self.x, y : self.y, z : self.z - T::one() });

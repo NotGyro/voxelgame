@@ -12,26 +12,27 @@ use memory::pool::AutoMemoryPool;
 
 use voxel::voxelstorage::*;
 use voxel::voxelmath::*;
+use world::block;
+
+
+type VoxelTy = block::BlockID;
+type Chunk = block::Chunk;
+type ChunkBounds = VoxelRange<i32>;
+
+const AIR : VoxelTy = 0;
 
 /// Struct used internally to represent unoptimized quads.
 #[derive(Clone)]
-pub struct InputQuad { x: usize, y: usize, exists: bool, done: bool, pub block_id: u8 }
+pub struct InputQuad { x: usize, y: usize, exists: bool, done: bool, pub block_id: VoxelTy }
 /// Struct returned as output from the generator; represents quads in an optimized mesh.
 #[derive(Debug, Clone)]
-pub struct OutputQuad { pub x: usize, pub y: usize, pub w: usize, pub h: usize, width_done: bool, pub block_id: u8 }
+pub struct OutputQuad { pub x: usize, pub y: usize, pub w: usize, pub h: usize, width_done: bool, pub block_id: VoxelTy }
 
 
 /// Simplified mesh generator.
 ///
 /// Generates a list of quads to render a chunk, optimized using greedy meshing, and with inner faces culled.
 pub struct MeshSimplifier;
-
-type VoxelTy = u8;
-type Chunk = VoxelStorage<VoxelTy, u8>;
-type ChunkBounds = VoxelRange<i32>;
-
-const AIR : VoxelTy = 0;
-
 #[derive(Debug, Clone)]
 pub struct ChunkMeshError; // TODO
 
@@ -264,7 +265,7 @@ impl MeshSimplifier {
                     o += 4;
                 }
             }
-            mesh.vertex_groups.push(Arc::new(VertexGroup::new(vertices, indices, *id as u8, device.clone(), memory_pool.clone())));
+            mesh.vertex_groups.push(Arc::new(VertexGroup::new(vertices, indices, (*id as VoxelTy) as u8, device.clone(), memory_pool.clone())));
         }
 
         //println!("+x: {}, -x: {}, +y: {}, -y: {}, +z: {}, -z: {}", count_p_x, count_n_x, count_p_y, count_n_y, count_p_z, count_n_z);

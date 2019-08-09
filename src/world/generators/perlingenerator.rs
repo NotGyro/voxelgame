@@ -6,6 +6,7 @@ use world::generators::WorldGenerator;
 
 use voxel::voxelmath::*;
 use voxel::voxelarray::*;
+use world::block::{BlockID, Chunk};
 
 /// Simple world generator using perlin noise.
 pub struct PerlinGenerator {
@@ -38,11 +39,11 @@ impl PerlinGenerator {
 
 
 impl WorldGenerator for PerlinGenerator {
-    fn generate(&self, bounds: VoxelRange<i32>, dimension_id: u32) -> VoxelArray<u8, u8> {
+    fn generate(&self, bounds: VoxelRange<i32>, dimension_id: u32) -> Chunk {
         let size = bounds.get_size();
         
         let num_elements = (size.x * size.y * size.z) as usize;
-        let mut data : Vec<u8> = Vec::with_capacity(num_elements);
+        let mut data : Vec<BlockID> = Vec::with_capacity(num_elements);
         for i in 0..num_elements { data.push(0); }
 
         for x in 0..size.x {
@@ -54,7 +55,7 @@ impl WorldGenerator for PerlinGenerator {
                     if (bounds.lower.y + y) as f32 <= height_abs {
                         let block_type_val = self.block_type_noise.get([((bounds.lower.x + x) as f64) * self.block_type_scale, 
                                                                         ((bounds.lower.z + z) as f64) * self.block_type_scale]) / 2.0 + 0.5;
-                        let block_id = ((block_type_val * 3.0) + 1.0) as u8;
+                        let block_id = ((block_type_val * 3.0) + 1.0) as BlockID;
 
                         data[xyz_to_i(x as usize, y as usize, z as usize, 
                                         size.x as usize, size.y as usize, size.z as usize)] = block_id;

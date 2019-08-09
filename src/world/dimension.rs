@@ -1,8 +1,9 @@
 //! A dimension.
 
-
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::AtomicUsize;
+extern crate parking_lot;
+use self::parking_lot::RwLock;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use std::collections::HashMap;
 use cgmath::{Point3, MetricSpace};
@@ -11,44 +12,110 @@ use world::generators::{WorldGenerator, PerlinGenerator};
 use voxel::voxelstorage::*;
 use voxel::voxelarray::*;
 use voxel::voxelmath::*;
+use world::block::{BlockID, Chunk};
 
 // TODO: Rewrite this to use the standard Futures API.
 /// State used for multithreaded chunk loading. Chunk is dirty and needs to be generated.
 pub static CHUNK_STATE_DIRTY: usize = 0;
-/// State used for multithreaded chunk loading. Chunk is currently being generated.
+/// State used for multithreaded chunk loading. Chunk mesh is currently being generated.
 pub static CHUNK_STATE_WRITING: usize = 1;
 /// State used for multithreaded chunk loading. Chunk is finished being generated.
 pub static CHUNK_STATE_CLEAN: usize = 2;
 
-/// A dimension.
-pub struct Dimension {
-    pub chunks: HashMap<(i32, i32, i32), (Arc<RwLock<VoxelArray<u8, u8>>>, Arc<AtomicUsize>)>,
-    pub chunk_size: (i32, i32, i32),
+pub struct ChunkEntry { 
+    pub data: RwLock<Chunk>,
+    pub state: AtomicUsize,
+    pub bounds: VoxelRange<i32>,
 }
 
+/// A dimension.
+pub struct Dimension {
+    pub chunks: HashMap<VoxelPos<i32>, Arc<ChunkEntry>>,
+    pub chunk_size: VoxelSize<u32>,
+}
+
+pub fn blockpos_to_chunk(point: VoxelPos<i32>, chunk_size : VoxelSize<u32>) -> VoxelPos<i32> { 
+    vpos!(point.x / chunk_size.x as i32, 
+        point.y / chunk_size.y as i32, 
+        point.z / chunk_size.z as i32)
+}
+
+pub fn chunkpos_to_block(point: VoxelPos<i32>, chunk_size : VoxelSize<u32>) -> VoxelPos<i32> { 
+    vpos!(point.x * chunk_size.x as i32, 
+        point.y * chunk_size.y as i32, 
+        point.z * chunk_size.z as i32)
+}
+
+pub fn chunkpos_to_center(point: VoxelPos<i32>, chunk_size : VoxelSize<u32>) -> Point3<f32> { 
+    let block_pos = chunkpos_to_block(point, chunk_size);
+    Point3::new(block_pos.x as f32 + (chunk_size.x as f32 * 0.5), 
+        block_pos.y as f32 + (chunk_size.y as f32 * 0.5), 
+        block_pos.z as f32 + (chunk_size.z as f32 * 0.5))
+}
+
+impl VoxelStorage<BlockID, i32> for Dimension {
+    fn get(&self, coord: VoxelPos<i32>) -> Option<BlockID>{
+        let size = self.chunk_size.clone();
+        // Do we have a chunk that would contain this block position?
+        match self.chunks.get(&blockpos_to_chunk(coord, size)) {
+            Some(chunk_entry_arc) => {
+                let chunk_entry = chunk_entry_arc.clone();
+                let bounds = chunk_entry.bounds.clone();
+                assert!(bounds.get_size_unsigned() == size);
+                match bounds.get_local_unsigned(coord) {
+                    Some(pos) => {
+                        // Block until we can get a valid voxel.
+                        let locked = chunk_entry.data.read();
+                        return locked.get(vpos!(pos.x as u8, pos.y as u8, pos.z as u8));
+                    },
+                    // Position is not inside our chunk's bounds.
+                    None => return None,
+                }
+            },
+            // Chunk not currently loaded or generated.
+            None => return None,
+        }
+    }
+    fn set(&mut self, coord: VoxelPos<i32>, value: BlockID) {
+        let size = self.chunk_size.clone();
+        // Do we have a chunk that would contain this block position?
+        let mut rslt = self.chunks.get_mut(&blockpos_to_chunk(coord, size)).cloned();
+        match rslt {
+            Some(chunk_entry) => {
+                let bounds = chunk_entry.bounds.clone();
+                assert!(bounds.get_size_unsigned() == size);
+                match bounds.get_local_unsigned(coord) {
+                    Some(pos) => {
+                        // Block until we can write.
+                        let mut locked = chunk_entry.data.write();
+                        let position = vpos!(pos.x as u8, pos.y as u8, pos.z as u8);
+                        let current = locked.get(position);
+                        if current.is_some() && (current.unwrap() != value) {
+                            chunk_entry.state.store(CHUNK_STATE_DIRTY, Ordering::Relaxed); //Mark for remesh.
+                            locked.set(position, value);
+                        }
+                    },
+                    // Position is not inside our chunk's bounds.
+                    None => return,
+                }
+            },
+            // Chunk not currently loaded or generated.
+            None => return,
+        }
+    }
+}
 
 impl Dimension {
     pub fn new() -> Dimension {
         Dimension {
             chunks: HashMap::new(),
-            chunk_size: (16, 16, 16),
+            chunk_size: vpos!(16, 16, 16),
         }
     }
-    pub fn chunkpos_to_block(&self, point: (i32, i32, i32) ) -> (i32, i32, i32) { 
-        (point.0 * self.chunk_size.0 as i32, 
-                    point.1 * self.chunk_size.1 as i32, 
-                    point.2 * self.chunk_size.2 as i32)
-    }
-    pub fn chunkpos_to_center(&self, point: (i32, i32, i32) ) -> Point3<f32> { 
-        let block_pos = self.chunkpos_to_block(point);
-        Point3::new(block_pos.0 as f32 + (self.chunk_size.0 as f32 * 0.5), 
-                    block_pos.1 as f32 + (self.chunk_size.1 as f32 * 0.5), 
-                    block_pos.2 as f32 + (self.chunk_size.2 as f32 * 0.5))
-    }
 
-    pub fn is_chunk_loaded(&self, chunk_pos : (i32, i32, i32) ) -> bool {self.chunks.contains_key(&chunk_pos)}
+    pub fn is_chunk_loaded(&self, chunk_pos : VoxelPos<i32> ) -> bool {self.chunks.contains_key(&chunk_pos)}
 
-    pub fn loaded_chunk_list(&self) -> Vec<(i32, i32, i32)> {
+    pub fn loaded_chunk_list(&self) -> Vec<VoxelPos<i32>> {
         let mut result = Vec::new();
         for pos in self.chunks.keys() {
             result.push(*pos);
@@ -66,38 +133,41 @@ impl Dimension {
         let chunk_size = self.chunk_size.clone();
 
         let gen = PerlinGenerator::new();
+
+        let chunk_size = self.chunk_size.clone();
         
         self.chunks.retain(|pos, _| {
-            let block_pos = (pos.0 * chunk_size.0 as i32, 
-                    pos.1 * chunk_size.1 as i32, 
-                    pos.2 * chunk_size.2 as i32);
-            let chunk_pos = Point3::new(block_pos.0 as f32 + (chunk_size.0 as f32 * 0.5), 
-                        block_pos.1 as f32 + (chunk_size.1 as f32 * 0.5), 
-                        block_pos.2 as f32 + (chunk_size.2 as f32 * 0.5));
+            let chunk_pos = chunkpos_to_center(*pos, chunk_size);
             let dist = Point3::distance(chunk_pos, player_pos);
             dist < RETAIN_RADIUS // offset added to prevent load/unload loop on the edge
         });
 
-        let player_x_in_chunks = (player_pos.x / (self.chunk_size.0 as f32)) as i32;
-        let player_y_in_chunks = (player_pos.y / (self.chunk_size.1 as f32)) as i32;
-        let player_z_in_chunks = (player_pos.z / (self.chunk_size.2 as f32)) as i32;
+        let player_x_in_chunks = (player_pos.x / (self.chunk_size.x as f32)) as i32;
+        let player_y_in_chunks = (player_pos.y / (self.chunk_size.y as f32)) as i32;
+        let player_z_in_chunks = (player_pos.z / (self.chunk_size.z as f32)) as i32;
         for cx in (player_x_in_chunks-CHUNK_RADIUS)..(player_x_in_chunks+CHUNK_RADIUS+1) {
             for cy in (player_y_in_chunks-CHUNK_RADIUS)..(player_y_in_chunks+CHUNK_RADIUS+1) {
                 for cz in (player_z_in_chunks-CHUNK_RADIUS)..(player_z_in_chunks+CHUNK_RADIUS+1) {
-                    let chunk_pos = (cx as i32, cy as i32, cz as i32);
+                    let chunk_pos = vpos!(cx, cy, cz);
                     if self.chunks.contains_key(&chunk_pos) {
                         continue;
                     }
 
-                    let chunk_world_pos = self.chunkpos_to_center((cx, cy, cz));
+                    let chunk_world_pos = chunkpos_to_center(vpos!(cx, cy, cz), chunk_size);
                     let dist = Point3::distance(chunk_world_pos, player_pos);
                     if dist < CHUNK_DISTANCE {
-                        let chunk_origin = self.chunkpos_to_block((cx, cy, cz));
-                        let mut range = VoxelRange{lower: VoxelPos::from(chunk_origin), 
-                                        upper : VoxelPos::from(chunk_origin) + VoxelPos::from(self.chunk_size)};
+                        let chunk_origin = chunkpos_to_block(vpos!(cx, cy, cz), chunk_size);
+                        let mut range = VoxelRange{lower: chunk_origin, 
+                                upper : chunk_origin + vpos!(self.chunk_size.x as i32, self.chunk_size.y as i32, self.chunk_size.z as i32)};
                         range.validate();
-                        let mut chunk = gen.generate(range, 0);
-                        self.chunks.insert(chunk_pos, (Arc::new(RwLock::new(chunk)), Arc::new(AtomicUsize::new(CHUNK_STATE_DIRTY))));
+                        let mut chunk = gen.generate(range.clone(), 0);
+                        self.chunks.insert(chunk_pos, Arc::new(
+                            ChunkEntry { 
+                                data: RwLock::new(chunk),
+                                state: AtomicUsize::new(CHUNK_STATE_DIRTY),
+                                bounds: range.clone(),
+                            }
+                        ));
                         queue.chunks_changed = true;
                     }
                 }

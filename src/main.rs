@@ -9,7 +9,8 @@ extern crate winit;
 #[macro_use] extern crate vulkano;
 #[macro_use] extern crate vulkano_shader_derive;
 #[macro_use] extern crate lazy_static;
-
+#[macro_use] extern crate log;
+#[macro_use] extern crate string_cache;
 
 #[macro_use] mod voxel;
 
@@ -30,5 +31,6 @@ mod vulkano_win;
 mod world;
 
 fn main() {
+    util::logger::init_logger();
     game::Game::new().run();
 }
