@@ -41,7 +41,7 @@ impl MeshSimplifier {
     pub fn generate_quads(chunk: &Chunk, range: ChunkBounds) -> Vec<(VoxelAxis, usize, Vec<OutputQuad>)> {
         let mut output = Vec::new();
         // Look in each direction.
-        for facing in VoxelAxis::iter_all() {
+        voxel_sides_unroll!(facing, {
             // Which directions AREN'T the ones we're stacking?
             let up = match facing.into() {
                 VoxelAxisUnsigned::X => VoxelAxis::PosiY,
@@ -101,7 +101,7 @@ impl MeshSimplifier {
                 // Done with this slice, now process it.
                 output.push((facing, layer as usize, MeshSimplifier::process_slice(input_quads, max_x as usize, max_y as usize)));
             }
-        }
+        });
         output
     }
 

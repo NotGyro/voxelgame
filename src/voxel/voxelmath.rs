@@ -408,6 +408,24 @@ impl Iterator for VoxelAxisIter {
     }
 }
 
+
+macro_rules! voxel_sides_unroll {
+    ($side:ident, $b:block)=> { 
+        let $side = VoxelAxis::PosiX;
+        $b
+        let $side = VoxelAxis::NegaX;
+        $b
+        let $side = VoxelAxis::PosiY;
+        $b
+        let $side = VoxelAxis::NegaY;
+        $b
+        let $side = VoxelAxis::PosiZ;
+        $b
+        let $side = VoxelAxis::NegaZ;
+        $b
+    };
+}
+
 impl VoxelAxis {
     /// Gives you an iterator over each of the 6 cardinal directions in voxel space.
     pub fn iter_all() -> VoxelAxisIter { VoxelAxisIter::new() }
@@ -436,25 +454,24 @@ impl VoxelAxis {
         match axis {
             VoxelAxisUnsigned::X => { 
                 match sign { 
-                    POSI => return VoxelAxis::PosiX,
-                    NEGA => return VoxelAxis::NegaX,
+                    VoxelAxisSign::POSI => return VoxelAxis::PosiX,
+                    VoxelAxisSign::NEGA => return VoxelAxis::NegaX,
                 }
             },
             VoxelAxisUnsigned::Y => { 
                 match sign { 
-                    POSI => return VoxelAxis::PosiY,
-                    NEGA => return VoxelAxis::NegaY,
+                    VoxelAxisSign::POSI => return VoxelAxis::PosiY,
+                    VoxelAxisSign::NEGA => return VoxelAxis::NegaY,
                 }
             },
             VoxelAxisUnsigned::Z => { 
                 match sign { 
-                    POSI => return VoxelAxis::PosiZ,
-                    NEGA => return VoxelAxis::NegaZ,
+                    VoxelAxisSign::POSI => return VoxelAxis::PosiZ,
+                    VoxelAxisSign::NEGA => return VoxelAxis::NegaZ,
                 }
             },
         }
     }
-
 }
 
 impl <T> VoxelPos<T> where T : Copy + Integer {
@@ -759,6 +776,20 @@ fn test_axis_iteration() {
     for dir in VoxelAxis::iter_all() {
         list.push(dir);
     }
+    assert!( list.len() == 6 );
+    assert!(list.contains(&VoxelAxis::PosiX));
+    assert!(list.contains(&VoxelAxis::NegaX));
+    assert!(list.contains(&VoxelAxis::PosiY));
+    assert!(list.contains(&VoxelAxis::NegaY));
+    assert!(list.contains(&VoxelAxis::PosiZ));
+    assert!(list.contains(&VoxelAxis::NegaZ));
+}
+#[test]
+fn test_axis_iteration_unrolled() {
+    let mut list : Vec<VoxelAxis> = Vec::new();
+    voxel_sides_unroll!(dir, {
+        list.push(dir);
+    });
     assert!( list.len() == 6 );
     assert!(list.contains(&VoxelAxis::PosiX));
     assert!(list.contains(&VoxelAxis::NegaX));
