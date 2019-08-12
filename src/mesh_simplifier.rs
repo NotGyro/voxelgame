@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use cgmath::Point3;
 use vulkano::device::Device;
 
-use geometry::{Mesh, VertexPositionNormalUVColor, VertexGroup, Material};
+use geometry::{Mesh, VertexPositionNormalUVColor, VertexGroup};
 use util::Transform;
 use memory::pool::AutoMemoryPool;
 

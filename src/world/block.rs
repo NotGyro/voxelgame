@@ -2,7 +2,6 @@ extern crate string_cache;
 extern crate parking_lot;
 
 use self::string_cache::DefaultAtom as Atom;
-use voxel::voxelmath::*;
 use std::collections::HashMap;
 
 use self::parking_lot::Mutex;

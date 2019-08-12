@@ -5,9 +5,8 @@ pub mod perlingenerator;
 pub use self::perlingenerator::PerlinGenerator;
 
 use voxel::voxelmath::*;
-use voxel::voxelarray::*;
 
-use world::block::{BlockID, Chunk};
+use world::block::Chunk;
 
 /// Trait for world generators.
 pub trait WorldGenerator {

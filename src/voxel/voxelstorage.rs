@@ -4,7 +4,11 @@ extern crate num;
 use std::marker::Copy;
 use voxel::voxelmath::VoxelPos;
 use voxel::voxelmath::VoxelRange;
-use std::io::prelude::*;
+use std::fmt::Debug;
+use voxel::voxelevent::VoxelEvent;
+use voxel::voxelevent::VoxelEventInner;
+use std::error;
+use std::result::Result;
 
 use self::num::Integer;
 
@@ -23,10 +27,15 @@ use self::num::Integer;
 /// calling these methods / treating them as "flat" voxel
 /// structures implies acting on a level of detail of 0.
 
-pub trait VoxelStorage<T: Clone, P: Copy + Integer> {
+pub trait VoxelStorage<T: Clone + Debug, P: Copy + Integer + Debug> {
     // Get and Set are all you need to implement a Voxel Storage.
     fn get(&self, coord: VoxelPos<P>) -> Option<T>;
     fn set(&mut self, coord: VoxelPos<P>, value: T);
+
+    fn apply_event(&mut self, e : VoxelEvent<T, P>) -> Result<(), Box<dyn error::Error>> where Self: std::marker::Sized {
+        e.apply_blind(self)?;
+        Ok(())
+    }
 }
 /*
 pub trait VoxelStorageIOAble<T : Clone, P: Copy + Integer> : VoxelStorage<T, P> where P : Copy + Integer {
@@ -39,12 +48,12 @@ pub trait VoxelStorageIOAble<T : Clone, P: Copy + Integer> : VoxelStorage<T, P> 
 /// Must provide a valid voxel for any position within
 /// the range provided by get_bounds().
 /// Usually, this implies that the voxel storage is not paged.
-pub trait VoxelStorageBounded<T: Clone, P: Copy + Integer> : VoxelStorage<T, P> { 
+pub trait VoxelStorageBounded<T: Clone + Debug, P: Copy + Integer + Debug> : VoxelStorage<T, P> { 
     fn get_bounds(&self) -> VoxelRange<P>;
 }
 
 /// Copy voxels from one storage to another. 
-pub fn voxel_blit<T: Clone, P: Copy + Integer>(source_range : VoxelRange<P>, source: &VoxelStorage<T, P>, 
+pub fn voxel_blit<T: Clone + Debug, P: Copy + Integer + Debug>(source_range : VoxelRange<P>, source: &VoxelStorage<T, P>, 
                                                 dest_origin: VoxelPos<P>, dest: &mut VoxelStorage<T,P>) {
     for pos in source_range {
         let opt = source.get(pos);

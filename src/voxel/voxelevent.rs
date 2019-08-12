@@ -1,19 +1,29 @@
 //extern crate serde;
 extern crate std;
 extern crate num;
+extern crate serde;
 
 use std::error::Error;
 use std::fmt::Debug;
 use std::result::Result;
+use serde::{Serialize, Deserialize};
 
 use self::num::Integer;
-use voxel::*;
 use voxel::voxelmath::*;
 use voxel::voxelstorage::VoxelStorage;
+#[cfg(test)]
 use voxel::voxelarray::VoxelArray;
 
 pub type EventTypeID = u8;
 
+pub trait VoxelEventBounds : Clone + Debug {}
+impl<T> VoxelEventBounds for T where T : Clone + Debug {}
+
+pub trait VoxelEventPosBounds : Copy + Integer + Debug {}
+impl<T> VoxelEventPosBounds for T where T : Copy + Integer + Debug {}
+
+pub trait VoxelEventVoxelBounds : Clone + Debug {}
+impl<T> VoxelEventVoxelBounds for T where T : Clone + Debug {}
 /*
 #[derive(Debug, Clone)]
 struct EventApplyError {}
@@ -24,47 +34,48 @@ impl Error for EventApplyError {
     }
 }
 */
-
 pub type EventApplyResult = Result<(), Box<Error>>;
 
 /// Represents a change to the contents of a Voxel Storage.
 /// Type arguments are voxel type, position type. This is the version of this trait
 /// with no run-time type information.
-pub trait VoxelEventUntyped<T, P> : Clone where T : Clone, P : Copy + Integer{
+pub trait VoxelEventInner <T, P> : VoxelEventBounds where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds {
     /// Applies a voxel event to a VoxelStorage.
     /// The intended use of this is as a default case, and ideally specific 
     /// VoxelStorage implementations could provide better-optimized 
     fn apply_blind(&self, stor : &mut VoxelStorage<T, P>) -> EventApplyResult;
 }
 
+/*
 /// Type arguments are voxel type, position type.
-pub trait VoxelEvent<T, P>: VoxelEventUntyped<T, P> where T : Clone, P : Copy + Integer {
+pub trait VoxelEvent<T, P>: VoxelEventUntyped<T, P> where T : Clone + Debug + Send + Sync, P : Copy + Integer + Debug + Send + Sync {
     const TYPE_ID: EventTypeID;
     fn get_type_id() -> EventTypeID { Self::TYPE_ID }
 }
+*/
 
 // ---- Actual event structs and their VoxelEventUntyped implementations. ----
 
-#[derive(Clone, Debug)]
-pub struct OneVoxelChange<T : Clone, P : Copy + Integer> {
-    new_value : T,
-    pos : VoxelPos<P>,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OneVoxelChange<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds {
+    pub new_value : T,
+    pub pos : VoxelPos<P>,
 }
 
-#[derive(Clone, Debug)]
-pub struct SetVoxelRange<T : Clone, P : Copy + Integer> { 
-    new_value : T, 
-    range : VoxelRange<P>,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SetVoxelRange<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds { 
+    pub new_value : T, 
+    pub range : VoxelRange<P>,
 }
 
-impl <T, P> VoxelEventUntyped<T, P> for OneVoxelChange<T, P> where T : Clone, P : Copy + Integer {
+impl <T, P> VoxelEventInner<T, P> for OneVoxelChange<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds {
     fn apply_blind(&self, stor : &mut VoxelStorage<T, P>) -> EventApplyResult {
         stor.set(self.pos, self.new_value.clone());
         Ok(()) // TODO: modify VoxelStorage's "Set" method to return errors rather than silently fail
     }
 }
 
-impl <T, P> VoxelEventUntyped<T, P> for SetVoxelRange<T, P> where T : Clone, P : Copy + Integer {
+impl <T, P> VoxelEventInner<T, P> for SetVoxelRange<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds {
     fn apply_blind(&self, stor : &mut VoxelStorage<T, P>) -> EventApplyResult {
         for pos in self.range {
             stor.set(pos, self.new_value.clone()); 
@@ -72,6 +83,32 @@ impl <T, P> VoxelEventUntyped<T, P> for SetVoxelRange<T, P> where T : Clone, P :
         Ok(()) // TODO: modify VoxelStorage's "Set" method to return errors rather than silently fail
     }
 }
+
+//TODO: Generate this with a macro
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum VoxelEvent<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds {
+    SetOne(OneVoxelChange<T,P>),
+    SetRange(SetVoxelRange<T,P>),
+}
+
+impl <T, P> VoxelEventInner<T, P> for VoxelEvent<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds {
+    fn apply_blind(&self, stor : &mut VoxelStorage<T, P>) -> EventApplyResult {
+        match self { 
+            VoxelEvent::SetOne(evt) => evt.apply_blind(stor),
+            VoxelEvent::SetRange(evt) => evt.apply_blind(stor),
+        }
+    }
+}
+
+// ------ Temporary impls before we make the macro ------
+/*
+impl <T, P> VoxelEvent<T, P> for OneVoxelChange<T, P> where T : Clone + Debug + Send + Sync, P : Copy + Integer + Debug + Send + Sync{
+    const TYPE_ID: EventTypeID = 2;
+}
+
+impl <T, P> VoxelEvent<T, P> for SetVoxelRange<T, P> where T : Clone + Debug + Send + Sync, P : Copy + Integer + Debug + Send + Sync{
+    const TYPE_ID: EventTypeID = 3;
+}*/
 
 // ----------------------- Tests -----------------------
 

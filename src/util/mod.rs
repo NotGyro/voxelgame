@@ -3,6 +3,7 @@
 
 mod aabb;
 pub mod logger;
+pub mod event;
 pub use self::aabb::AABB;
 
 use cgmath::{Vector3, Point3, Quaternion, Deg, Matrix4, EuclideanSpace};

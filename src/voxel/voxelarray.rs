@@ -5,9 +5,8 @@ use std::marker::Copy;
 
 use voxel::voxelstorage::*;
 use voxel::voxelmath::*;
-use std::io::prelude::*;
-use std::mem;
 use std::default::Default;
+use std::fmt::Debug;
 
 use self::num::Integer;
 
@@ -15,16 +14,16 @@ use self::num::Integer;
 /// which is indexed by voxel positions with some math done on them. 
 /// Should have a fixed, constant size after creation.
 #[derive(Clone, Debug)]
-pub struct VoxelArray<T: Clone, P: Copy + Integer + USizeAble> {
+pub struct VoxelArray<T: Clone + Debug, P: Copy + Integer + Debug + USizeAble> {
     size_x: P, size_y: P, size_z: P,
     data: Vec<T>,
 }
 
-pub fn xyz_to_i<P: Copy + Integer + USizeAble>(x : P, y : P, z : P, size_x: P, size_y: P, size_z: P) -> usize {
-    ((z.as_usize() * (size_x.as_usize() * size_y.as_usize())) + (y.as_usize() * (size_x.as_usize())) + x.as_usize())
+pub fn xyz_to_i<P: Copy + Integer + Debug + USizeAble>(x : P, y : P, z : P, size_x: P, size_y: P, size_z: P) -> usize {
+    ((z.as_usize() * (size_z.as_usize() * size_y.as_usize())) + (y.as_usize() * (size_x.as_usize())) + x.as_usize())
 }
 
-impl <T:Clone, P: Copy + Integer + USizeAble> VoxelArray<T, P> {
+impl <T:Clone + Debug, P: Copy + Integer + Debug + USizeAble> VoxelArray<T, P> {
     pub fn load_new(szx: P, szy: P, szz: P, dat: Vec<T>) -> VoxelArray<T, P> {
         VoxelArray{size_x: szx, size_y: szy, size_z: szz, data: dat}
     }
@@ -43,12 +42,12 @@ impl <T:Clone, P: Copy + Integer + USizeAble> VoxelArray<T, P> {
     }
 }
 
-impl <T:Clone + Default, P: Copy + Integer + USizeAble> VoxelArray<T, P> {
+impl <T:Clone + Default + Debug, P: Copy + Integer + Debug + USizeAble> VoxelArray<T, P> {
     /// Make a new VoxelArray wherein every value is set to T::Default
     pub fn new_empty(szx: P, szy: P, szz: P) -> VoxelArray<T, P> { VoxelArray::new_solid(szx, szy, szz,T::default()) }
 }
 
-impl <T: Clone, P: Copy + Integer + USizeAble> VoxelStorage<T, P> for VoxelArray<T, P> {
+impl <T: Clone + Debug, P: Copy + Integer + Debug + USizeAble> VoxelStorage<T, P> for VoxelArray<T, P> {
     fn get(&self, coord: VoxelPos<P>) -> Option<T> {
     	//Bounds-check.
     	if (coord.x >= self.size_x) ||
@@ -90,7 +89,7 @@ impl <T: Clone, P> VoxelStorageIOAble<T, P> for VoxelArray<T, P> where P : Copy 
     }
 }*/
 
-impl <T: Clone, P> VoxelStorageBounded<T, P> for VoxelArray<T, P> where P : Copy + Integer + USizeAble { 
+impl <T, P> VoxelStorageBounded<T, P> for VoxelArray<T, P> where T : Clone + Debug, P : Copy + Integer + Debug + USizeAble { 
     fn get_bounds(&self) -> VoxelRange<P> { VoxelRange {lower: VoxelPos{x: P::zero(),y: P::zero(), z:P::zero()},  
                                             upper: VoxelPos{x: self.size_x, y: self.size_y, z: self.size_z} } }
 }

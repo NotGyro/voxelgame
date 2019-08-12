@@ -105,7 +105,7 @@ impl SkyboxRenderPipeline {
         let index_buffer = CpuAccessibleBufferAutoPool::<[u32]>::from_iter(device.clone(), memory_pool.clone(), BufferUsage::all(), idxs.iter().cloned()).expect("failed to create buffer");
 
         let (texture, _future) = {
-            let mut path_str = String::from("textures/skybox.png");
+            let path_str = String::from("textures/skybox.png");
             let image = ::image::open(Path::new(&path_str)).unwrap().to_rgba();
             let (w, h) = image.dimensions();
             let image_data = image.into_raw().clone();

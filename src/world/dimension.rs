@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use std::collections::HashMap;
 use cgmath::{Point3, MetricSpace};
-use renderer::LineRenderQueue;
 use world::generators::{WorldGenerator, PerlinGenerator};
 use voxel::voxelstorage::*;
 use voxel::voxelarray::*;
@@ -79,7 +78,7 @@ impl VoxelStorage<BlockID, i32> for Dimension {
     fn set(&mut self, coord: VoxelPos<i32>, value: BlockID) {
         let size = self.chunk_size.clone();
         // Do we have a chunk that would contain this block position?
-        let mut rslt = self.chunks.get_mut(&blockpos_to_chunk(coord, size)).cloned();
+        let rslt = self.chunks.get(&blockpos_to_chunk(coord, size)).cloned();
         match rslt {
             Some(chunk_entry) => {
                 let bounds = chunk_entry.bounds.clone();
@@ -125,12 +124,10 @@ impl Dimension {
 
     /// Adds new chunks as the player moves closer to them, and removes old chunks as the player
     /// moves away.
-    pub fn load_unload_chunks(&mut self, player_pos: Point3<f32>, queue: &mut LineRenderQueue) {
+    pub fn load_unload_chunks_clientside(&mut self, player_pos: Point3<f32>) {
         const CHUNK_RADIUS: i32 = 2;
         const CHUNK_DISTANCE: f32 = CHUNK_RADIUS as f32 * 2.0 * 16.0;
         const RETAIN_RADIUS: f32 = CHUNK_DISTANCE + 4.0; // offset added to prevent load/unload loop on the edge
-
-        let chunk_size = self.chunk_size.clone();
 
         let gen = PerlinGenerator::new();
 
@@ -168,19 +165,66 @@ impl Dimension {
                                 bounds: range.clone(),
                             }
                         ));
-                        queue.chunks_changed = true;
+                        //queue.chunks_changed = true;
                     }
                 }
             }
-        } /*
-        //Let's debug our renderer!
-        if ! (self.chunks.contains_key(&(0,0,0))) {
-            let mut range = VoxelRange{lower: vpos!(0,0,0), 
-                                        upper : VoxelPos::from(self.chunk_size)};
-            range.validate();
-            let mut chunk = gen.generate(range, 0);
-            self.chunks.insert((0,0,0), (Arc::new(RwLock::new(chunk)), Arc::new(AtomicUsize::new(CHUNK_STATE_DIRTY))));
-            queue.chunks_changed = true;
-        }*/
+        }
+    }
+    pub fn load_unload_chunks_serverside(&mut self, player_positions: Vec<Point3<f32>>) {
+        const CHUNK_RADIUS: i32 = 2;
+        const CHUNK_DISTANCE: f32 = CHUNK_RADIUS as f32 * 2.0 * 16.0;
+        const RETAIN_RADIUS: f32 = CHUNK_DISTANCE + 4.0; // offset added to prevent load/unload loop on the edge
+
+        let gen = PerlinGenerator::new();
+
+        let chunk_size = self.chunk_size.clone();
+        
+        self.chunks.retain(|pos, _| {
+            let mut keep : bool = false;
+            for player_pos in player_positions.iter() {
+                let chunk_pos = chunkpos_to_center(*pos, chunk_size);
+                let dist = Point3::distance(chunk_pos, *player_pos);
+                if dist < RETAIN_RADIUS {
+                    keep = true;
+                }
+            }
+            keep
+        });
+
+        for player_pos_ref in player_positions.iter() {
+            let player_pos = *player_pos_ref;
+            let player_x_in_chunks = (player_pos.x / (self.chunk_size.x as f32)) as i32;
+            let player_y_in_chunks = (player_pos.y / (self.chunk_size.y as f32)) as i32;
+            let player_z_in_chunks = (player_pos.z / (self.chunk_size.z as f32)) as i32;
+            for cx in (player_x_in_chunks-CHUNK_RADIUS)..(player_x_in_chunks+CHUNK_RADIUS+1) {
+                for cy in (player_y_in_chunks-CHUNK_RADIUS)..(player_y_in_chunks+CHUNK_RADIUS+1) {
+                    for cz in (player_z_in_chunks-CHUNK_RADIUS)..(player_z_in_chunks+CHUNK_RADIUS+1) {
+                        let chunk_pos = vpos!(cx, cy, cz);
+                        if self.chunks.contains_key(&chunk_pos) {
+                            continue;
+                        }
+
+                        let chunk_world_pos = chunkpos_to_center(vpos!(cx, cy, cz), chunk_size);
+                        let dist = Point3::distance(chunk_world_pos, player_pos);
+                        if dist < CHUNK_DISTANCE {
+                            let chunk_origin = chunkpos_to_block(vpos!(cx, cy, cz), chunk_size);
+                            let mut range = VoxelRange{lower: chunk_origin, 
+                                    upper : chunk_origin + vpos!(self.chunk_size.x as i32, self.chunk_size.y as i32, self.chunk_size.z as i32)};
+                            range.validate();
+                            let mut chunk = gen.generate(range.clone(), 0);
+                            self.chunks.insert(chunk_pos, Arc::new(
+                                ChunkEntry { 
+                                    data: RwLock::new(chunk),
+                                    state: AtomicUsize::new(CHUNK_STATE_DIRTY),
+                                    bounds: range.clone(),
+                                }
+                            ));
+                            //queue.chunks_changed = true;
+                        }
+                    }
+                }
+            }
+        }
     }
 }

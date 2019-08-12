@@ -23,6 +23,11 @@ chrono = "0.4.7"
 lazy_static = "*"
 num = "*"
 string_cache = "*"
+clap = "*"
+linear-map = "*"
+
+serde = { version = "1.0.98", features = ["derive"] }
+serde_json = "*"
 
 #TODO: Rewrite VoxelArray to use compile-time size.
 #typenum = "1.10.0"

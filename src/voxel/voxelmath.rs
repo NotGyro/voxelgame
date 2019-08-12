@@ -25,6 +25,8 @@ use std::cmp;
 use std::result::Result;
 use std::error::Error;
 
+use serde::{Serialize, Deserialize};
+
 pub trait USizeAble {
     fn as_usize(&self) -> usize;
     fn from_usize(val : usize) -> Self;
@@ -126,9 +128,8 @@ impl <S, U> ToSigned<S> for U where S : ToUnsigned<U>, U : Clone {
     }
 }
 
-
 /// A point in Voxel space. (A cell.)
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VoxelPos<T : Copy + Integer> {
 	pub x: T, pub y: T, pub z: T,
 }
@@ -196,7 +197,7 @@ impl <S, U> ToUnsigned<VoxelPos<U>> for VoxelPos<S>
 pub type VoxelSize<T> = VoxelPos<T>;
 
 /// Represents any rectangular cuboid in voxel space.
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VoxelRange<T : Copy + Integer> {
 	pub lower : VoxelPos<T>, pub upper : VoxelPos<T>, 
 }

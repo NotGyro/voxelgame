@@ -7,6 +7,7 @@ use winit::VirtualKeyCode;
 use cgmath::{Point3, Vector3, Quaternion, Matrix4, Euler, Deg, InnerSpace};
 use cgmath::Transform as CgmathTransform;
 
+pub type PlayerID = u64;
 
 /// Struct representing the player.
 pub struct Player {

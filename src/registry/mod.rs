@@ -72,10 +72,11 @@ impl DimensionRegistry {
             dimensions: HashMap::new()
         }
     }
-
-
     /// Gets the dimension with the given id, or None if one couldn't be found.
-    pub fn get(&mut self, id: u32) -> Option<&mut Dimension> {
+    pub fn get_mut(&mut self, id: u32) -> Option<&mut Dimension> {
         self.dimensions.get_mut(&id)
+    }
+    pub fn get(&self, id: u32) -> Option<&Dimension> {
+        self.dimensions.get(&id)
     }
 }

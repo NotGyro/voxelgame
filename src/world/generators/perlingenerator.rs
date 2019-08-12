@@ -39,12 +39,12 @@ impl PerlinGenerator {
 
 
 impl WorldGenerator for PerlinGenerator {
-    fn generate(&self, bounds: VoxelRange<i32>, dimension_id: u32) -> Chunk {
+    fn generate(&self, bounds: VoxelRange<i32>, _dimension_id: u32) -> Chunk {
         let size = bounds.get_size();
         
         let num_elements = (size.x * size.y * size.z) as usize;
         let mut data : Vec<BlockID> = Vec::with_capacity(num_elements);
-        for i in 0..num_elements { data.push(0); }
+        for _ in 0..num_elements { data.push(0); }
 
         for x in 0..size.x {
             for z in 0..size.z {
