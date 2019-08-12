@@ -12,8 +12,9 @@ use std::time::{Instant, Duration};
 use std::collections::HashMap;
 use std::result::Result;
 use std::error;
+use std::ops::Neg;
 
-use cgmath::Point3;
+use cgmath::{Point3, Rotation, Rotation3, Quaternion, Deg, Rad, Vector3, InnerSpace};
 use vulkano::buffer::BufferUsage;
 use vulkano::instance::Instance;
 use vulkano::swapchain::Surface;
@@ -117,7 +118,7 @@ impl Game {
             
             let voxel_event_sender = sender.clone();
             let (voxel_event_receiver, _) = bus.subscribe(); // We don't need the ID since we're never going to remove this channel until the game terminates.
-
+            surface.window().hide_cursor(true);
             return Game {
                 c : Some(Client {
                     events_loop,
@@ -174,7 +175,7 @@ impl Game {
                         println!("Got event: {:?}", event); 
                         match self.dimension_registry.get_mut(0).unwrap().apply_event(event) {
                             Ok(_) => {},
-                            Err(error) => error!("Encountered an error while attempting to apply a voxel event: {:?}", error),
+                            Err(error) => error!("Encountered an error while attempting to apply a voxel event: {}", error),
                         }
                     }
                     // Get chunks to load and unload.
@@ -202,7 +203,7 @@ impl Game {
                 let mut client = self.c.take().unwrap();
                 match client.update(&self.dimension_registry) {
                     Ok(keep_running) => running = keep_running,
-                    Err(error) => error!("Encountered an error in tick {} in client mainloop: {:?}", self.current_server_tick, error),
+                    Err(error) => error!("Encountered an error in tick {} in client mainloop: {}", self.current_server_tick, error),
                 }  
                 self.c = Some(client); // Take ownership again
             }
@@ -213,7 +214,7 @@ impl Game {
 
 impl Client {
     /// Main game loop.
-    pub fn update(&mut self, dimension_registry : &DimensionRegistry) -> Result<bool, Box<dyn error::Error>> {
+    pub fn update(&mut self, dimension_registry : &DimensionRegistry) -> Result<bool, Box<error::Error>> {
         let mut keep_running = true;
 
         let elapsed = Instant::now() - self.prev_time;
@@ -224,6 +225,20 @@ impl Client {
 
         let mut events = Vec::new() as Vec<Event>;
         self.events_loop.poll_events(|ev| { events.push(ev); });
+
+        let yaw = Deg::<f32>(self.player.yaw as f32);
+        let pitch = Deg::<f32>(self.player.pitch.neg() as f32);
+
+        let yawq : Quaternion<f32> = Quaternion::from_angle_y(Rad::<f32>::from(yaw));
+        let pitchq : Quaternion<f32> = Quaternion::from_angle_x(Rad::<f32>::from(pitch));
+        let rotation = (yawq * pitchq).normalize();
+
+        let mut forward : Vector3<f32> = Vector3::new(0.0, 0.0, 1.0);
+        forward = rotation.rotate_vector(forward);
+        forward.z = forward.z.neg();
+
+        let winpos = self.surface.window().get_inner_size().unwrap();
+        self.surface.window().set_cursor_position(winit::dpi::LogicalPosition::new(winpos.width * 0.5, winpos.height * 0.5))?;
 
         for ev in events {
             match ev {
@@ -248,28 +263,97 @@ impl Client {
                     }
                 },
                 Event::DeviceEvent { event: DeviceEvent::Button { button, state }, .. } => {
-                    if button == 3 {
-                        match state {
+                    // 1 is left mouse, 2 is middle mouse, 3 is right mouse.
+                    match button {
+                        1 => match state {
                             ::winit::ElementState::Pressed => {
-                                self.surface.window().hide_cursor(true);
+                                //self.surface.window().hide_cursor(true);
+                                self.input_state.left_mouse_pressed = true;
+                            },
+                            ::winit::ElementState::Released => {
+                                //self.surface.window().hide_cursor(false);
+                                /*let pos = vpos!(self.player.position.x.floor() as i32, 
+                                                self.player.position.y.floor() as i32, 
+                                                self.player.position.z.floor() as i32);*/
+                                self.input_state.left_mouse_pressed = false;
+                                let mut raycast = VoxelRaycast::new(self.player.position, forward);
+                                let mut continue_raycast = true;
+                                while continue_raycast {
+                                    match dimension_registry.get(0).unwrap().get(raycast.pos) {
+                                        Ok(voxel) => {
+                                            // Is it not air?
+                                            if(voxel != 0) {
+                                                self.voxel_event_sender.try_send(VoxelEvent::SetOne(OneVoxelChange{ new_value : 0, pos : raycast.pos}))?;
+                                                continue_raycast = false;
+                                            }
+                                        },
+                                        Err(_) => continue_raycast = false, //We've left the currently-loaded chunks.
+                                    }
+                                    raycast.step();
+                                }
+                            }
+                        },
+                        2 => match state {
+                            ::winit::ElementState::Pressed => {},
+                            ::winit::ElementState::Released => {
+                                let mut raycast = VoxelRaycast::new(self.player.position, forward);
+                                let mut continue_raycast = true;
+                                let mut counter = 0;
+                                while continue_raycast {
+                                    match dimension_registry.get(0).unwrap().get(raycast.pos) {
+                                        Ok(voxel) => {
+                                            // Is it not air?
+                                            if(voxel != 0) {
+                                                self.player.selected_block = voxel;
+                                                continue_raycast = false;
+                                            }
+                                        },
+                                        Err(_) => continue_raycast = false, //We've left the currently-loaded chunks.
+                                    }
+                                    raycast.step();
+                                }
+                            },
+                        }
+                        3 => match state {
+                            ::winit::ElementState::Pressed => {
+                                //self.surface.window().hide_cursor(true);
                                 self.input_state.right_mouse_pressed = true;
                             },
                             ::winit::ElementState::Released => {
-                                self.surface.window().hide_cursor(false);
+                                //self.surface.window().hide_cursor(false);
                                 self.input_state.right_mouse_pressed = false;
+                                /*let one_in_front = self.player.position + forward;
+                                let block_forward = vpos!(one_in_front.x as i32, one_in_front.y as i32, one_in_front.z as i32);
+                                self.voxel_event_sender.try_send(VoxelEvent::SetOne(OneVoxelChange{ new_value : 1, pos : block_forward}))?;*/
+                                let mut raycast = VoxelRaycast::new(self.player.position, forward);
+                                let mut continue_raycast = true;
+                                let mut counter = 0;
+                                while continue_raycast {
+                                    match dimension_registry.get(0).unwrap().get(raycast.pos) {
+                                        Ok(voxel) => {
+                                            // Is it not air?
+                                            if(voxel != 0) {
+                                                let adjacent_pos = raycast.pos.get_neighbor(raycast.get_last_direction().opposite());
+                                                self.voxel_event_sender.try_send(VoxelEvent::SetOne(OneVoxelChange{ new_value : self.player.selected_block, pos : adjacent_pos}))?;
+                                                continue_raycast = false;
+                                            }
+                                        },
+                                        Err(_) => continue_raycast = false, //We've left the currently-loaded chunks.
+                                    }
+                                    raycast.step();
+                                }
                             }
-                        }
+                        },
+                        _ => {},
                     }
                 },
                 Event::DeviceEvent { event: DeviceEvent::Key(inp), .. }  => {
                     self.input_state.update_key(inp);
                     if inp.virtual_keycode == Some(VirtualKeyCode::Escape) {
                         keep_running = false;
-                    }
+                    } 
                     if inp.virtual_keycode == Some(VirtualKeyCode::E) && inp.state == ::winit::ElementState::Pressed {
                         println!("{:?}", self.player.position);
-                        let pos = vpos!(self.player.position.x as i32, self.player.position.y as i32, self.player.position.z as i32);
-                        self.voxel_event_sender.try_send(VoxelEvent::SetOne(OneVoxelChange{ new_value : 0, pos : pos}))?;
                     }
                 },
                 _ => ()

@@ -128,19 +128,22 @@ impl <S, U> ToSigned<S> for U where S : ToUnsigned<U>, U : Clone {
     }
 }
 
+pub trait VoxelCoord : Copy + Integer + fmt::Display + fmt::Debug {}
+impl<T> VoxelCoord for T where T : Copy + Integer + fmt::Display + fmt::Debug {}
+
 /// A point in Voxel space. (A cell.)
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VoxelPos<T : Copy + Integer> {
+pub struct VoxelPos<T : VoxelCoord> {
 	pub x: T, pub y: T, pub z: T,
 }
 
-impl <T:Copy + Integer + Default> Default for VoxelPos<T> {
+impl <T:VoxelCoord + Default> Default for VoxelPos<T> {
     /// Make a new VoxelArray wherein every value is set to T::Default
     fn default() -> Self { VoxelPos{x : Default::default(),y : Default::default(),z : Default::default(),} }
 }
 
 
-impl <T> Add for VoxelPos<T> where T : Copy + Integer + Add<Output=T> {
+impl <T> Add for VoxelPos<T> where T : VoxelCoord + Add<Output=T> {
     type Output = VoxelPos<T>;
 
     fn add(self, other: VoxelPos<T>) -> VoxelPos<T> {
@@ -148,7 +151,7 @@ impl <T> Add for VoxelPos<T> where T : Copy + Integer + Add<Output=T> {
     }
 }
 
-impl <T> Sub for VoxelPos<T> where T : Copy + Integer + Sub<Output=T> {
+impl <T> Sub for VoxelPos<T> where T : VoxelCoord + Sub<Output=T> {
     type Output = VoxelPos<T>;
 
     fn sub(self, other: VoxelPos<T>) -> VoxelPos<T> {
@@ -157,23 +160,23 @@ impl <T> Sub for VoxelPos<T> where T : Copy + Integer + Sub<Output=T> {
 }
 
 
-impl <T> fmt::Display for VoxelPos<T> where T : Copy + Integer + fmt::Display {
+impl <T> fmt::Display for VoxelPos<T> where T : VoxelCoord + fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({}, {}, {})", self.x, self.y, self.z)
     }
 }
 
-impl <T> From<(T, T, T)> for VoxelPos<T> where T : Copy + Integer { 
+impl <T> From<(T, T, T)> for VoxelPos<T> where T : VoxelCoord { 
     fn from(tuple: (T, T, T)) -> VoxelPos<T> { VoxelPos { x : tuple.0, y : tuple.1, z : tuple.2} }
 }
-impl <T> Into<(T, T, T)> for VoxelPos<T> where T : Copy + Integer { 
+impl <T> Into<(T, T, T)> for VoxelPos<T> where T : VoxelCoord { 
     fn into(self) -> (T, T, T) { (self.x, self.y, self.z) }
 }
 
-impl <T> From<Point3<T>> for VoxelPos<T> where T : Copy + Integer + BaseNum { 
+impl <T> From<Point3<T>> for VoxelPos<T> where T : VoxelCoord + BaseNum { 
     fn from(point: Point3<T>) -> VoxelPos<T> { VoxelPos { x : point.x, y : point.y, z : point.z} }
 }
-impl <T> Into<Point3<T>> for VoxelPos<T> where T : Copy + Integer + BaseNum { 
+impl <T> Into<Point3<T>> for VoxelPos<T> where T : VoxelCoord + BaseNum { 
     fn into(self) -> Point3<T> { Point3::new(self.x, self.y, self.z) }
 }
 
@@ -183,7 +186,7 @@ macro_rules! vpos {
 
 
 impl <S, U> ToUnsigned<VoxelPos<U>> for VoxelPos<S> 
-    where S : ToUnsigned<U> + Copy + Integer, U : ToSigned<S> + Copy + Integer {
+    where S : ToUnsigned<U> + VoxelCoord, U : ToSigned<S> + VoxelCoord {
     fn as_unsigned(&self) -> VoxelPos<U> {
         vpos!(self.x.as_unsigned(), self.y.as_unsigned(), self.z.as_unsigned())
     }
@@ -198,11 +201,11 @@ pub type VoxelSize<T> = VoxelPos<T>;
 
 /// Represents any rectangular cuboid in voxel space.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VoxelRange<T : Copy + Integer> {
+pub struct VoxelRange<T : VoxelCoord> {
 	pub lower : VoxelPos<T>, pub upper : VoxelPos<T>, 
 }
 
-impl <T> VoxelRange<T> where T : Copy + Integer {
+impl <T> VoxelRange<T> where T : VoxelCoord {
     pub fn get_validated_lower(&self) -> VoxelPos<T> {
         vpos!(cmp::min(self.upper.x, self.lower.x), cmp::min(self.upper.y, self.lower.y), cmp::min(self.upper.z, self.lower.z))
     }
@@ -333,7 +336,7 @@ impl <T> VoxelRange<T> where T : Copy + Integer {
     }
 }
 
-pub trait VoxelRangeUnsigner<S : ToUnsigned<U> + Copy + Integer, U : ToSigned<S> + Copy + Integer> {
+pub trait VoxelRangeUnsigner<S : ToUnsigned<U> + VoxelCoord, U : ToSigned<S> + VoxelCoord> {
     type MARKERHACK;
     /// Take a position in "world" space and return an offset from self.lower, telling you how far the point is from our origin.
     /// Returns None if this is not a local point.
@@ -346,7 +349,7 @@ pub trait VoxelRangeUnsigner<S : ToUnsigned<U> + Copy + Integer, U : ToSigned<S>
 }
 
 impl <S, U> VoxelRangeUnsigner<S, U> for VoxelRange<S> 
-    where S : ToUnsigned<U> + Copy + Integer, U : ToSigned<S> + Copy + Integer {
+    where S : ToUnsigned<U> + VoxelCoord, U : ToSigned<S> + VoxelCoord {
     type MARKERHACK = ();
     /// Take a position in "world" space and return an offset from self.lower, telling you how far the point is from our origin.
     /// Returns None if this is not a local point.
@@ -354,9 +357,10 @@ impl <S, U> VoxelRangeUnsigner<S, U> for VoxelRange<S>
     /// it returns the offset from self.lower, and guarantees this point is within our range
     /// which means that point is always higher than self.lower 
     fn get_local_unsigned(&self, point : VoxelPos<S>) -> Option<VoxelPos<U>> {
+        let validated_lower = self.get_validated_lower();
         if ! self.contains(point) { return None; }
-        let validated_lower = self.get_validated_lower().as_unsigned();
-        Some(point.as_unsigned() - validated_lower)
+        let point_after_offset = point - validated_lower;
+        Some(point_after_offset.as_unsigned())
     }
     /// Size is a scalar, it can only be positive - it is the amount that self.upper is further from self.lower.
     fn get_size_unsigned(&self) -> VoxelSize<U> {
@@ -367,13 +371,13 @@ impl <S, U> VoxelRangeUnsigner<S, U> for VoxelRange<S>
     }
 }
 
-impl <T> fmt::Display for VoxelRange<T> where T : Copy + Integer + fmt::Display {
+impl <T> fmt::Display for VoxelRange<T> where T : VoxelCoord + fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({} to {})", self.lower, self.upper)
     }
 }
 
-impl <T> IntoIterator for VoxelRange<T> where T : Copy + Integer { 
+impl <T> IntoIterator for VoxelRange<T> where T : VoxelCoord { 
     type Item = VoxelPos<T>;
     type IntoIter = VoxelRangeIter<T>;
     fn into_iter(self) -> VoxelRangeIter<T> {
@@ -381,12 +385,12 @@ impl <T> IntoIterator for VoxelRange<T> where T : Copy + Integer {
     }
 }
 
-pub struct VoxelRangeIter<T : Copy + Integer> {
+pub struct VoxelRangeIter<T : VoxelCoord> {
     range : VoxelRange<T>,
     pos : Option<VoxelPos<T>>,
 }
 
-impl <T> Iterator for VoxelRangeIter<T> where T : Copy + Integer { 
+impl <T> Iterator for VoxelRangeIter<T> where T : VoxelCoord { 
     type Item = VoxelPos<T>;
     fn next(&mut self) -> Option<VoxelPos<T>> { 
         if self.pos.is_none() { 
@@ -422,7 +426,7 @@ impl <T> Iterator for VoxelRangeIter<T> where T : Copy + Integer {
     }
 }
 
-pub struct VoxelSideIter<T : Copy + Integer> {
+pub struct VoxelSideIter<T : VoxelCoord> {
     range : VoxelRange<T>,
     //origin : VoxelPos<T>,
     direction1 : VoxelAxis,
@@ -430,7 +434,7 @@ pub struct VoxelSideIter<T : Copy + Integer> {
     pos : Option<VoxelPos<T>>,
 }
 
-impl <T> Iterator for VoxelSideIter<T> where T : Copy + Integer + Signed { 
+impl <T> Iterator for VoxelSideIter<T> where T : VoxelCoord + Signed { 
     type Item = VoxelPos<T>;
     fn next(&mut self) -> Option<VoxelPos<T>> { 
         if self.pos.is_none() { 
@@ -604,7 +608,7 @@ impl VoxelAxis {
     }
 }
 
-impl <T> VoxelPos<T> where T : Copy + Integer {
+impl <T> VoxelPos<T> where T : VoxelCoord {
     /// Along the provided axis, what is our coordinate?
     pub fn coord_for_axis(&self, direction : VoxelAxisUnsigned) -> T {
         match direction {
@@ -625,7 +629,7 @@ impl <T> VoxelPos<T> where T : Copy + Integer {
 
 
 /// Signed, we can subtract.
-impl <T> VoxelPos<T> where T : Copy + Integer + Signed {
+impl <T> VoxelPos<T> where T : VoxelCoord + Signed {
     /// Returns the cell adjacent to this one in the direction passed
     pub fn get_neighbor(&self, direction : VoxelAxis) -> VoxelPos<T> {
         match direction {
@@ -659,7 +663,7 @@ impl Error for UnsignedUnderflowError {
 
 
 /// Unsigned 
-impl <T> VoxelPos<T> where T : Copy + Integer + Unsigned {
+impl <T> VoxelPos<T> where T : VoxelCoord + Unsigned {
     /// Returns the cell adjacent to this one in the direction passed
     pub fn get_neighbor_unsigned(&self, direction : VoxelAxis) -> Result<VoxelPos<T>, UnsignedUnderflowError> {
         match direction {
@@ -729,28 +733,26 @@ impl VoxelRaycast {
         match self.last_direction {
             VoxelAxisUnsigned::X => {
                 if self.step_dir.x < 0 {
-                    //The reason these are all the opposite of what they seem like they should be is we're getting the side the raycast hit.
-                    //The last direction we traveled will be the opposite of the normal of the side we struck.
-                    return VoxelAxis::PosiX;
+                    return VoxelAxis::NegaX;
                 }
                 else {
-                    return VoxelAxis::NegaX;
+                    return VoxelAxis::PosiX;
                 }
             },
             VoxelAxisUnsigned::Y => {
                 if self.step_dir.y < 0 {
-                    return VoxelAxis::PosiY;
+                    return VoxelAxis::NegaY;
                 }
                 else {
-                    return VoxelAxis::NegaY;
+                    return VoxelAxis::PosiY;
                 }
             },
             VoxelAxisUnsigned::Z => {
                 if self.step_dir.z < 0 {
-                    return VoxelAxis::PosiZ;
+                    return VoxelAxis::NegaZ;
                 }
                 else {
-                    return VoxelAxis::NegaZ;
+                    return VoxelAxis::PosiZ;
                 }
             },
         }

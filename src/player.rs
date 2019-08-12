@@ -20,7 +20,9 @@ pub struct Player {
     /// Yaw (horizontal rotation) of the player camera.
     pub yaw: f64,
     /// ID of the dimension the player is currently in.
-    pub dimension_id: u32
+    pub dimension_id: u32,
+    /// Block currently selected for placement.
+    pub selected_block: u32,
 }
 
 
@@ -32,42 +34,42 @@ impl Player {
             camera: Camera::new(),
             pitch: 0.0,
             yaw: 0.0,
-            dimension_id: 0
+            dimension_id: 0,
+            selected_block: 1,
         }
     }
 
 
     /// Updates the player. Called every frame in the game loop.
     pub fn update(&mut self, dt: f64, input: &InputState) {
-        if input.right_mouse_pressed {
-            const MOUSE_SPEED: f64 = 3.0;
-            self.yaw += input.mouse_delta.0 * MOUSE_SPEED * dt;
-            self.pitch -= input.mouse_delta.1 * MOUSE_SPEED * dt;
-            if self.pitch < -89.0 { self.pitch = -89.0; }
-            if self.pitch > 89.0 { self.pitch = 89.0; }
+        const MOUSE_SPEED: f64 = 3.0;
+        self.yaw += input.mouse_delta.0 * MOUSE_SPEED * dt;
+        self.pitch -= input.mouse_delta.1 * MOUSE_SPEED * dt;
+        if self.pitch < -89.0 { self.pitch = -89.0; }
+        if self.pitch > 89.0 { self.pitch = 89.0; }
+        self.yaw = self.yaw % 360.0;
 
-            let mut move_vec = Vector3::new(0.0, 0.0, 0.0);
-            if input.get_key_down(VirtualKeyCode::W) { move_vec += Vector3::new(0.0, 0.0, -1.0); }
-            if input.get_key_down(VirtualKeyCode::S) { move_vec += Vector3::new(0.0, 0.0,  1.0); }
-            if input.get_key_down(VirtualKeyCode::A) { move_vec += Vector3::new(-1.0, 0.0, 0.0); }
-            if input.get_key_down(VirtualKeyCode::D) { move_vec += Vector3::new( 1.0, 0.0, 0.0); }
-            move_vec = Matrix4::from_angle_y(Deg(-self.yaw as f32)).transform_vector(move_vec);
-            if input.get_key_down(VirtualKeyCode::Space) { move_vec += Vector3::new(0.0, 1.0, 0.0); }
-            if input.get_key_down(VirtualKeyCode::LControl) { move_vec += Vector3::new(0.0, -1.0, 0.0); }
+        let mut move_vec = Vector3::new(0.0, 0.0, 0.0);
+        if input.get_key_down(VirtualKeyCode::W) { move_vec += Vector3::new(0.0, 0.0, -1.0); }
+        if input.get_key_down(VirtualKeyCode::S) { move_vec += Vector3::new(0.0, 0.0,  1.0); }
+        if input.get_key_down(VirtualKeyCode::A) { move_vec += Vector3::new(-1.0, 0.0, 0.0); }
+        if input.get_key_down(VirtualKeyCode::D) { move_vec += Vector3::new( 1.0, 0.0, 0.0); }
+        move_vec = Matrix4::from_angle_y(Deg(-self.yaw as f32)).transform_vector(move_vec);
+        if input.get_key_down(VirtualKeyCode::Space) { move_vec += Vector3::new(0.0, 1.0, 0.0); }
+        if input.get_key_down(VirtualKeyCode::LControl) { move_vec += Vector3::new(0.0, -1.0, 0.0); }
 
-            const MOVE_SPEED: f32 = 5.0;  // units per second
-            let mut speed = MOVE_SPEED * dt as f32;
-            if input.get_key_down(VirtualKeyCode::LShift) { speed *= 5.0; }
-            // can't normalize (0, 0, 0)
-            if move_vec.magnitude() == 0.0 {
-                move_vec = move_vec * speed;
-            }
-            else {
-                move_vec = move_vec.normalize() * speed;
-            }
-
-            self.position += move_vec;
+        const MOVE_SPEED: f32 = 5.0;  // units per second
+        let mut speed = MOVE_SPEED * dt as f32;
+        if input.get_key_down(VirtualKeyCode::LShift) { speed *= 5.0; }
+        // can't normalize (0, 0, 0)
+        if move_vec.magnitude() == 0.0 {
+            move_vec = move_vec * speed;
         }
+        else {
+            move_vec = move_vec.normalize() * speed;
+        }
+
+        self.position += move_vec;
     }
 
 

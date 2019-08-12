@@ -1,9 +1,12 @@
 //! A dimension.
 
 extern crate parking_lot;
+
 use self::parking_lot::RwLock;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::error::Error;
+use std::fmt;
 
 use std::collections::HashMap;
 use cgmath::{Point3, MetricSpace};
@@ -12,6 +15,28 @@ use voxel::voxelstorage::*;
 use voxel::voxelarray::*;
 use voxel::voxelmath::*;
 use world::block::{BlockID, Chunk};
+
+/// An error reported upon trying to get or set a voxel which is not currently loaded. 
+#[derive(Debug, Copy, Clone)]
+pub enum ChunkedVoxelError<T, S> where T : VoxelCoord, S : VoxelCoord {
+    NotLoaded(VoxelPos<T>, VoxelPos<T>),
+    ChunkBoundsInvalid(VoxelPos<T>, VoxelPos<T>, VoxelSize<S>, VoxelSize<S>, VoxelRange<T>),
+}
+impl<T, S> fmt::Display for ChunkedVoxelError<T, S> where T : VoxelCoord, S : VoxelCoord {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ChunkedVoxelError::NotLoaded(blockpos, pos) => write!(f, "Chunk at {} not yet loaded, cannot access block {}", pos, blockpos),
+            ChunkedVoxelError::ChunkBoundsInvalid(blockpos, chunkpos, expectedchunksize, actualchunksize, actualbounds) => write!(f, 
+                                "Failed attempt to access block {}: Chunk size invalid. Chunk at {} is supposed to be of size {}, and it is {}. Its bounds are {}.", 
+                                blockpos, chunkpos, expectedchunksize, actualchunksize, actualbounds),
+        }
+    }
+}
+impl<T, S> Error for ChunkedVoxelError<T, S> where T : VoxelCoord, S : VoxelCoord {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
 
 // TODO: Rewrite this to use the standard Futures API.
 /// State used for multithreaded chunk loading. Chunk is dirty and needs to be generated.
@@ -33,10 +58,10 @@ pub struct Dimension {
     pub chunk_size: VoxelSize<u32>,
 }
 
-pub fn blockpos_to_chunk(point: VoxelPos<i32>, chunk_size : VoxelSize<u32>) -> VoxelPos<i32> { 
-    vpos!(point.x / chunk_size.x as i32, 
-        point.y / chunk_size.y as i32, 
-        point.z / chunk_size.z as i32)
+pub fn blockpos_to_chunk(point: VoxelPos<i32>, chunk_size : VoxelSize<u32>) -> VoxelPos<i32> {
+    vpos!((point.x as f32 / chunk_size.x as f32).floor() as i32, 
+        (point.y as f32 / chunk_size.y as f32).floor() as i32, 
+        (point.z as f32 / chunk_size.z as f32).floor() as i32)
 }
 
 pub fn chunkpos_to_block(point: VoxelPos<i32>, chunk_size : VoxelSize<u32>) -> VoxelPos<i32> { 
@@ -52,55 +77,70 @@ pub fn chunkpos_to_center(point: VoxelPos<i32>, chunk_size : VoxelSize<u32>) -> 
         block_pos.z as f32 + (chunk_size.z as f32 * 0.5))
 }
 
+#[test]
+fn test_chunkpos() { 
+    assert!(blockpos_to_chunk(vpos!(6, -1, 7), vpos!(16, 16, 16)) == vpos!(0, -1, 0));
+    assert!(blockpos_to_chunk(vpos!(17, -25, 2), vpos!(8, 24, 4)) == vpos!(2, -2, 0));
+}
+
 impl VoxelStorage<BlockID, i32> for Dimension {
-    fn get(&self, coord: VoxelPos<i32>) -> Option<BlockID>{
+    fn get(&self, coord: VoxelPos<i32>) -> Result<BlockID, Box<Error>>{
         let size = self.chunk_size.clone();
+        let chunkpos = blockpos_to_chunk(coord, size);
         // Do we have a chunk that would contain this block position?
-        match self.chunks.get(&blockpos_to_chunk(coord, size)) {
+        match self.chunks.get(&chunkpos) {
             Some(chunk_entry_arc) => {
                 let chunk_entry = chunk_entry_arc.clone();
                 let bounds = chunk_entry.bounds.clone();
-                assert!(bounds.get_size_unsigned() == size);
+                let chunk_size = bounds.get_size_unsigned();
+                if chunk_size != size {
+                    return Err(Box::new(ChunkedVoxelError::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds)));
+                }
                 match bounds.get_local_unsigned(coord) {
                     Some(pos) => {
                         // Block until we can get a valid voxel.
                         let locked = chunk_entry.data.read();
-                        return locked.get(vpos!(pos.x as u8, pos.y as u8, pos.z as u8));
+                        return Ok(locked.get(vpos!(pos.x as u8, pos.y as u8, pos.z as u8))?);
                     },
                     // Position is not inside our chunk's bounds.
-                    None => return None,
+                    None => return Err(Box::new(ChunkedVoxelError::<i32, u32>::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds))),
                 }
             },
             // Chunk not currently loaded or generated.
-            None => return None,
+            None => return Err(Box::new(ChunkedVoxelError::<i32, u32>::NotLoaded(chunkpos,coord))),
         }
     }
-    fn set(&mut self, coord: VoxelPos<i32>, value: BlockID) {
+    fn set(&mut self, coord: VoxelPos<i32>, value: BlockID) -> Result<(), Box<Error>>{
         let size = self.chunk_size.clone();
         // Do we have a chunk that would contain this block position?
-        let rslt = self.chunks.get(&blockpos_to_chunk(coord, size)).cloned();
+        let chunkpos = blockpos_to_chunk(coord, size);
+        let rslt = self.chunks.get(&chunkpos).cloned();
         match rslt {
             Some(chunk_entry) => {
                 let bounds = chunk_entry.bounds.clone();
-                assert!(bounds.get_size_unsigned() == size);
+                let chunk_size = bounds.get_size_unsigned();
+                if chunk_size != size {
+                    return Err(Box::new(ChunkedVoxelError::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds)));
+                }
                 match bounds.get_local_unsigned(coord) {
                     Some(pos) => {
                         // Block until we can write.
                         let mut locked = chunk_entry.data.write();
                         let position = vpos!(pos.x as u8, pos.y as u8, pos.z as u8);
-                        let current = locked.get(position);
-                        if current.is_some() && (current.unwrap() != value) {
+                        let current = locked.get(position)?;
+                        if current != value {
                             chunk_entry.state.store(CHUNK_STATE_DIRTY, Ordering::Relaxed); //Mark for remesh.
-                            locked.set(position, value);
+                            locked.set(position, value)?;
                         }
                     },
                     // Position is not inside our chunk's bounds.
-                    None => return,
+                    None => return Err(Box::new(ChunkedVoxelError::<i32, u32>::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds))),
                 }
             },
             // Chunk not currently loaded or generated.
-            None => return,
+            None => return Err(Box::new(ChunkedVoxelError::<i32, u32>::NotLoaded(chunkpos,coord))),
         }
+        Ok(())
     }
 }
 

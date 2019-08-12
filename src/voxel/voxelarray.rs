@@ -1,29 +1,60 @@
 extern crate std;
 extern crate num;
 
-use std::marker::Copy;
-
 use voxel::voxelstorage::*;
 use voxel::voxelmath::*;
 use std::default::Default;
 use std::fmt::Debug;
+use std::fmt::Display;
+use std::fmt;
+use std::error;
+use std::error::Error;
 
-use self::num::Integer;
+/// An error reported upon trying to get or set a voxel outside of our range. 
+#[derive(Debug, Copy, Clone)]
+pub struct NotInBoundsError<T> where T : 'static + VoxelCoord {
+    pub was_set: bool,
+    pub position: VoxelPos<T>,
+    pub our_size: VoxelSize<T>,
+}
+impl<T> NotInBoundsError<T> where T : VoxelCoord { 
+    fn new(wass: bool, pos : &VoxelPos<T>, sz : &VoxelSize<T>) -> Self {
+        NotInBoundsError { 
+            was_set: wass,
+            position: pos.clone(),
+            our_size: sz.clone(),
+        }
+    }
+}
+
+impl<T> Display for NotInBoundsError<T> where T : VoxelCoord {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.was_set {
+            true => write!(f, "Attempted to set a voxel at position {} on a VoxelArray of size {}", self.position, self.our_size),
+            false => write!(f, "Attempted to get a voxel at position {} on a VoxelArray of size {}", self.position, self.our_size),
+        }
+    }
+}
+impl<T> Error for NotInBoundsError<T> where T : VoxelCoord {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
 
 /// A 3D packed array of voxels - it's a single flat buffer in memory,
 /// which is indexed by voxel positions with some math done on them. 
 /// Should have a fixed, constant size after creation.
 #[derive(Clone, Debug)]
-pub struct VoxelArray<T: Clone + Debug, P: Copy + Integer + Debug + USizeAble> {
+pub struct VoxelArray<T: Voxel, P: 'static + VoxelCoord + USizeAble> {
     size_x: P, size_y: P, size_z: P,
     data: Vec<T>,
 }
 
-pub fn xyz_to_i<P: Copy + Integer + Debug + USizeAble>(x : P, y : P, z : P, size_x: P, size_y: P, size_z: P) -> usize {
+pub fn xyz_to_i<P: 'static + VoxelCoord + USizeAble>(x : P, y : P, z : P, size_x: P, size_y: P, size_z: P) -> usize {
     ((z.as_usize() * (size_z.as_usize() * size_y.as_usize())) + (y.as_usize() * (size_x.as_usize())) + x.as_usize())
 }
 
-impl <T:Clone + Debug, P: Copy + Integer + Debug + USizeAble> VoxelArray<T, P> {
+impl <T:Voxel, P: 'static + VoxelCoord + USizeAble> VoxelArray<T, P> {
     pub fn load_new(szx: P, szy: P, szz: P, dat: Vec<T>) -> VoxelArray<T, P> {
         VoxelArray{size_x: szx, size_y: szy, size_z: szz, data: dat}
     }
@@ -42,33 +73,34 @@ impl <T:Clone + Debug, P: Copy + Integer + Debug + USizeAble> VoxelArray<T, P> {
     }
 }
 
-impl <T:Clone + Default + Debug, P: Copy + Integer + Debug + USizeAble> VoxelArray<T, P> {
+impl <T:Voxel + Default, P: 'static + VoxelCoord + USizeAble> VoxelArray<T, P> {
     /// Make a new VoxelArray wherein every value is set to T::Default
     pub fn new_empty(szx: P, szy: P, szz: P) -> VoxelArray<T, P> { VoxelArray::new_solid(szx, szy, szz,T::default()) }
 }
 
-impl <T: Clone + Debug, P: Copy + Integer + Debug + USizeAble> VoxelStorage<T, P> for VoxelArray<T, P> {
-    fn get(&self, coord: VoxelPos<P>) -> Option<T> {
+impl <T: Voxel, P: 'static + VoxelCoord + USizeAble> VoxelStorage<T, P> for VoxelArray<T, P> {
+    fn get(&self, coord: VoxelPos<P>) -> Result<T, Box<error::Error>> {
     	//Bounds-check.
     	if (coord.x >= self.size_x) ||
     		(coord.y >= self.size_y) ||
     		(coord.z >= self.size_z)
     	{
-    		return None;
+    		return Err(Box::new(NotInBoundsError::new(false, &coord, &vpos!(self.size_x, self.size_y, self.size_z))));
     	}
     	//Packed array access
-    	return self.data.get(xyz_to_i(coord.x, coord.y, coord.z, self.size_x, self.size_y, self.size_z)).map(|v| v.clone());
+    	return Ok(self.data.get(xyz_to_i(coord.x, coord.y, coord.z, self.size_x, self.size_y, self.size_z)).unwrap().clone());
     }
 
-    fn set(&mut self, coord: VoxelPos<P>, value: T) {
+    fn set(&mut self, coord: VoxelPos<P>, value: T) -> Result<(), Box<error::Error>> {
     	if (coord.x >= self.size_x) ||
     		(coord.y >= self.size_y) ||
     		(coord.z >= self.size_z)
     	{
-    		return;
+    		return Err(Box::new(NotInBoundsError::new(false, &coord, &vpos!(self.size_x, self.size_y, self.size_z))));
     	}
     	//Packed array access
     	(*self.data.get_mut(xyz_to_i(coord.x, coord.y, coord.z, self.size_x, self.size_y, self.size_z)).unwrap()) = value;
+        return Ok(());
     }
 }
 
@@ -89,7 +121,7 @@ impl <T: Clone, P> VoxelStorageIOAble<T, P> for VoxelArray<T, P> where P : Copy 
     }
 }*/
 
-impl <T, P> VoxelStorageBounded<T, P> for VoxelArray<T, P> where T : Clone + Debug, P : Copy + Integer + Debug + USizeAble { 
+impl <T, P> VoxelStorageBounded<T, P> for VoxelArray<T, P> where T : Voxel, P : 'static + VoxelCoord + USizeAble { 
     fn get_bounds(&self) -> VoxelRange<P> { VoxelRange {lower: VoxelPos{x: P::zero(),y: P::zero(), z:P::zero()},  
                                             upper: VoxelPos{x: self.size_x, y: self.size_y, z: self.size_z} } }
 }
@@ -106,7 +138,7 @@ fn test_array_raccess() {
     
     let testpos = VoxelPos{x: 14, y: 14, z: 14};
     assert!(test_va.get(testpos).unwrap() == 3822);
-    test_va.set(testpos,9);
+    assert!(test_va.set(testpos,9).is_ok());
     assert!(test_va.get(testpos).unwrap() == 9);
 }
 
@@ -122,7 +154,7 @@ fn test_array_iterative() {
     let mut test_va : VoxelArray<u16, u16> = VoxelArray::load_new(16, 16, 16, test_chunk);
     for pos in test_va.get_bounds() {
     	assert!(test_va.get(pos).unwrap() == 16);
-    	test_va.set(pos, (pos.x as u16 % 10));
+    	assert!(test_va.set(pos, (pos.x as u16 % 10)).is_ok());
     }
     assert!(test_va.get(VoxelPos{x: 10, y: 0, z: 0}).unwrap() == 0);
     assert!(test_va.get(VoxelPos{x: 11, y: 0, z: 0}).unwrap() == 1);

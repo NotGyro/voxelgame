@@ -10,6 +10,7 @@ pub struct InputState {
     keys_held: HashSet<::winit::VirtualKeyCode>,
     pub mouse_delta: (f64, f64),
     pub mouse_sensitivity: (f64, f64),
+    pub left_mouse_pressed: bool,
     pub right_mouse_pressed: bool
 }
 
@@ -20,6 +21,7 @@ impl InputState {
             keys_held: HashSet::new(),
             mouse_delta: (0.0, 0.0),
             mouse_sensitivity : (10.0, 10.0),
+            left_mouse_pressed: false,
             right_mouse_pressed: false
         }
     }

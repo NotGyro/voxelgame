@@ -1,7 +1,7 @@
 extern crate std;
 extern crate num;
 
-use std::marker::Copy;
+use voxel::voxelmath::VoxelCoord;
 use voxel::voxelmath::VoxelPos;
 use voxel::voxelmath::VoxelRange;
 use std::fmt::Debug;
@@ -10,8 +10,8 @@ use voxel::voxelevent::VoxelEventInner;
 use std::error;
 use std::result::Result;
 
-use self::num::Integer;
-
+pub trait Voxel : Clone + Debug {}
+impl<T> Voxel for T where T : Clone + Debug {}
 
 /// A basic trait for any 3d grid data structure.
 /// Type arguments are type of element, type of position.
@@ -27,12 +27,12 @@ use self::num::Integer;
 /// calling these methods / treating them as "flat" voxel
 /// structures implies acting on a level of detail of 0.
 
-pub trait VoxelStorage<T: Clone + Debug, P: Copy + Integer + Debug> {
+pub trait VoxelStorage<T: Voxel, P: VoxelCoord> {
     // Get and Set are all you need to implement a Voxel Storage.
-    fn get(&self, coord: VoxelPos<P>) -> Option<T>;
-    fn set(&mut self, coord: VoxelPos<P>, value: T);
+    fn get(&self, coord: VoxelPos<P>)  -> Result<T, Box<error::Error>>;
+    fn set(&mut self, coord: VoxelPos<P>, value: T) -> Result<(), Box<error::Error>>;
 
-    fn apply_event(&mut self, e : VoxelEvent<T, P>) -> Result<(), Box<dyn error::Error>> where Self: std::marker::Sized {
+    fn apply_event(&mut self, e : VoxelEvent<T, P>) -> Result<(), Box<error::Error>> where Self: std::marker::Sized {
         e.apply_blind(self)?;
         Ok(())
     }
@@ -48,19 +48,17 @@ pub trait VoxelStorageIOAble<T : Clone, P: Copy + Integer> : VoxelStorage<T, P> 
 /// Must provide a valid voxel for any position within
 /// the range provided by get_bounds().
 /// Usually, this implies that the voxel storage is not paged.
-pub trait VoxelStorageBounded<T: Clone + Debug, P: Copy + Integer + Debug> : VoxelStorage<T, P> { 
+pub trait VoxelStorageBounded<T: Voxel, P: VoxelCoord> : VoxelStorage<T, P> { 
     fn get_bounds(&self) -> VoxelRange<P>;
 }
 
 /// Copy voxels from one storage to another. 
-pub fn voxel_blit<T: Clone + Debug, P: Copy + Integer + Debug>(source_range : VoxelRange<P>, source: &VoxelStorage<T, P>, 
-                                                dest_origin: VoxelPos<P>, dest: &mut VoxelStorage<T,P>) {
+pub fn voxel_blit<T: Voxel, P: VoxelCoord>(source_range : VoxelRange<P>, source: &VoxelStorage<T, P>, 
+                                                dest_origin: VoxelPos<P>, dest: &mut VoxelStorage<T,P>)  -> Result<(), Box<error::Error>> {
     for pos in source_range {
-        let opt = source.get(pos);
-        match opt {
-            Some(voxel) => { let offset_pos = (pos - source_range.lower) + dest_origin;
-                dest.set(offset_pos, voxel); },
-            None => { /* Skip a turn. */ },
-        }
+        let voxel = source.get(pos)?;
+        let offset_pos = (pos - source_range.lower) + dest_origin;
+        dest.set(offset_pos, voxel)?;
     }
+    return Ok(());
 }

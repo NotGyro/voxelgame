@@ -15,8 +15,6 @@ extern crate winit;
 extern crate string_cache;
 extern crate linear_map;
 extern crate crossbeam;
-
-
 extern crate serde;
 
 #[macro_use] mod voxel;

@@ -8,9 +8,9 @@ use std::fmt::Debug;
 use std::result::Result;
 use serde::{Serialize, Deserialize};
 
-use self::num::Integer;
 use voxel::voxelmath::*;
 use voxel::voxelstorage::VoxelStorage;
+use voxel::voxelstorage::Voxel;
 #[cfg(test)]
 use voxel::voxelarray::VoxelArray;
 
@@ -19,11 +19,11 @@ pub type EventTypeID = u8;
 pub trait VoxelEventBounds : Clone + Debug {}
 impl<T> VoxelEventBounds for T where T : Clone + Debug {}
 
-pub trait VoxelEventPosBounds : Copy + Integer + Debug {}
-impl<T> VoxelEventPosBounds for T where T : Copy + Integer + Debug {}
+pub trait VoxelEventPosBounds : VoxelCoord {}
+impl<T> VoxelEventPosBounds for T where T : VoxelCoord {}
 
 pub trait VoxelEventVoxelBounds : Clone + Debug {}
-impl<T> VoxelEventVoxelBounds for T where T : Clone + Debug {}
+impl<T> VoxelEventVoxelBounds for T where T : Voxel {}
 /*
 #[derive(Debug, Clone)]
 struct EventApplyError {}
@@ -70,7 +70,7 @@ pub struct SetVoxelRange<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPo
 
 impl <T, P> VoxelEventInner<T, P> for OneVoxelChange<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds {
     fn apply_blind(&self, stor : &mut VoxelStorage<T, P>) -> EventApplyResult {
-        stor.set(self.pos, self.new_value.clone());
+        stor.set(self.pos, self.new_value.clone())?;
         Ok(()) // TODO: modify VoxelStorage's "Set" method to return errors rather than silently fail
     }
 }
@@ -78,7 +78,7 @@ impl <T, P> VoxelEventInner<T, P> for OneVoxelChange<T, P> where T : VoxelEventV
 impl <T, P> VoxelEventInner<T, P> for SetVoxelRange<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds {
     fn apply_blind(&self, stor : &mut VoxelStorage<T, P>) -> EventApplyResult {
         for pos in self.range {
-            stor.set(pos, self.new_value.clone()); 
+            stor.set(pos, self.new_value.clone())?; 
         }
         Ok(()) // TODO: modify VoxelStorage's "Set" method to return errors rather than silently fail
     }

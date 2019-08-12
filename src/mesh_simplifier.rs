@@ -75,10 +75,10 @@ impl MeshSimplifier {
                         let adjacent_point = point.get_neighbor_unsigned(facing);
                         let voxel_maybe = chunk.get(point);
                         let exists = match voxel_maybe {
-                            None => false,
-                            Some(AIR) => false,
+                            Err(_) => false,
+                            Ok(AIR) => false,
                             //Check neighbor point
-                            Some(_) => match adjacent_point {
+                            Ok(_) => match adjacent_point {
                                 Ok(adj) => {
                                     //We have found our way to the end of the chunk, and the next block is past our range. Make this side solid.
                                     if !(bounds_local.contains(adj)) {
@@ -86,9 +86,9 @@ impl MeshSimplifier {
                                     } else {
                                         // Is the neighboring block solid?
                                         match chunk.get(adj) {
-                                            None => true, //End of the underlying voxel storage - should match end of chunk.
-                                            Some(AIR) => true, //Air block, nothing in our way.
-                                            Some(_) => false, //Solid block in the way, do not process this quad.
+                                            Err(_) => true, //End of the underlying voxel storage - should match end of chunk.
+                                            Ok(AIR) => true, //Air block, nothing in our way.
+                                            Ok(_) => false, //Solid block in the way, do not process this quad.
                                         }
                                     }
                                 },
