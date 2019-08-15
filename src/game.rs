@@ -127,9 +127,9 @@ pub fn server_to_client_step(stream : TcpStream, to_client : Receiver<ToClientPa
                         Err(_) => error!("Error sending packet out of connection thread for client {}", client_addr),
                     }
                 },
-                Err(error) => {
+                Err(error) => { /*
                     error!("An error occurred: {} \n Terminating connection with {}", error, client_addr);
-                    keep_connection = false;
+                    keep_connection = false;*/
                 },
             }
             for packet in to_client.try_iter() {
@@ -143,9 +143,9 @@ pub fn server_to_client_step(stream : TcpStream, to_client : Receiver<ToClientPa
                             _ => {},
                         }
                     },
-                    Err(error) => {
+                    Err(error) => {/*
                         error!("An error occurred: {} \n Terminating connection with {}", error, client_addr);
-                        keep_connection = false;
+                        keep_connection = false;*/
                     },
                 }
             }
