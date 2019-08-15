@@ -3,7 +3,7 @@ extern crate parking_lot;
 extern crate log;
 extern crate crossbeam;
 extern crate serde;
-extern crate bincode;
+extern crate serde_json;
 
 use self::parking_lot::Mutex;
 use std::sync::Arc;
@@ -49,8 +49,8 @@ use world::block::BlockID;
 
 use self::crossbeam::crossbeam_channel::{unbounded, after};
 use self::crossbeam::crossbeam_channel::{Sender, Receiver};
-use self::bincode::deserialize_from;
-use self::bincode::serialize_into;
+//use self::bincode::deserialize_from;
+//use self::bincode::serialize_into;
 
 use serde::{Serialize, Deserialize};
 
@@ -113,7 +113,7 @@ pub fn server_to_client_step(stream : TcpStream, to_client : Receiver<ToClientPa
         let client_addr = stream.peer_addr().unwrap();
         while keep_connection {
             //Send out packets we just got from the client.
-            match deserialize_from::<TcpStream, ToServerPacket>(stream.try_clone().unwrap()) {
+            match serde_json::de::from_reader::<TcpStream, ToServerPacket>(stream.try_clone().unwrap()) {
                 Ok(packet) => {
                     match packet {
                         ToServerPacket::Disconnect => {
@@ -133,7 +133,7 @@ pub fn server_to_client_step(stream : TcpStream, to_client : Receiver<ToClientPa
                 },
             }
             for packet in to_client.try_iter() {
-                match serialize_into::<TcpStream, ToClientPacket>(stream.try_clone().unwrap(), &packet) {
+                match serde_json::ser::to_writer::<TcpStream, ToClientPacket>(stream.try_clone().unwrap(), &packet) {
                     Ok(()) => {
                         match packet {
                             ToClientPacket::Kick => {
@@ -347,6 +347,8 @@ impl Game {
                     // TODO: Any security on this.
                     for pl in self.players.iter_mut() {
                         for event in pl.recv_from.try_iter().collect::<Vec<ToServerPacket>>() {
+                            let clone_event = event.clone();
+                            info!("Received event from client: {:?}", clone_event);
                             match event {
                                 ToServerPacket::VoxEv(vev) => match self.event_bus.push(vev) {
                                     Ok(_) => {},
@@ -481,7 +483,7 @@ impl Client {
                                                 self.voxel_event_sender.try_send(event.clone())?;
                                                 match self.server_stream {
                                                    Some(ref stream) => {
-                                                       serialize_into::<TcpStream, ToServerPacket>(stream.try_clone().unwrap(), 
+                                                       serde_json::ser::to_writer::<TcpStream, ToServerPacket>(stream.try_clone().unwrap(), 
                                                                                                     &ToServerPacket::VoxEv(event));
                                                    },
                                                    None => {},
@@ -540,7 +542,7 @@ impl Client {
                                                 self.voxel_event_sender.try_send(event.clone())?;
                                                 match self.server_stream {
                                                    Some(ref stream) => {
-                                                       serialize_into::<TcpStream, ToServerPacket>(stream.try_clone().unwrap(), 
+                                                       serde_json::ser::to_writer::<TcpStream, ToServerPacket>(stream.try_clone().unwrap(), 
                                                                                                     &ToServerPacket::VoxEv(event));
                                                    },
                                                    None => {},

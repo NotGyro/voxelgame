@@ -61,10 +61,10 @@ fn main() {
     }
     let mut mode = game::GameMode::Singleplayer;
     if server_mode {
-        mode = game::GameMode::Server("127.0.0.1:17242".parse().unwrap());
+        mode = game::GameMode::Server("158.69.195.123:8400".parse().unwrap());
     } else if join_ip.is_some() { 
         println!("Launching to join a server at {}", join_ip.unwrap());
-        mode = game::GameMode::JoinServer(SocketAddr::new(join_ip.unwrap().parse().unwrap(), 17242));
+        mode = game::GameMode::JoinServer(SocketAddr::new(join_ip.unwrap().parse().unwrap(), 8400));
     }
 
     match util::logger::init_logger() {
