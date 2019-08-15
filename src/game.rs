@@ -3,6 +3,7 @@ extern crate parking_lot;
 extern crate log;
 extern crate crossbeam;
 extern crate serde;
+extern crate bincode;
 
 use self::parking_lot::Mutex;
 use std::sync::Arc;
@@ -13,6 +14,8 @@ use std::collections::HashMap;
 use std::result::Result;
 use std::error;
 use std::ops::Neg;
+
+use std::net::{IpAddr, SocketAddr, TcpStream, TcpListener};
 
 use cgmath::{Point3, Rotation, Rotation3, Quaternion, Deg, Rad, Vector3, InnerSpace};
 use vulkano::buffer::BufferUsage;
@@ -30,7 +33,7 @@ use renderer::Renderer;
 use input::InputState;
 use world::Dimension;
 use registry::DimensionRegistry;
-use player::{Player, PlayerID};
+use player::Player;
 use world::dimension::{CHUNK_STATE_DIRTY, CHUNK_STATE_WRITING, CHUNK_STATE_CLEAN};
 
 use mesh_simplifier::*;
@@ -40,10 +43,16 @@ use voxel::voxelevent::*;
 
 use util::logger::*;
 use util::event::*;
-use self::crossbeam::crossbeam_channel::{Sender, Receiver};
 
 use world::block::Chunk;
 use world::block::BlockID;
+
+use self::crossbeam::crossbeam_channel::{unbounded, after};
+use self::crossbeam::crossbeam_channel::{Sender, Receiver};
+use self::bincode::deserialize_from;
+use self::bincode::serialize_into;
+
+use serde::{Serialize, Deserialize};
 
 /// Naive implementation of something Future-shaped.
 type PendingMesh = Arc<Mutex<Option<Mesh>>>;
@@ -61,6 +70,119 @@ fn complete_pending_mesh(pend : PendingMesh, mesh : Mesh) {
 
 fn new_pending_mesh() -> PendingMesh { Arc::new(Mutex::new(None)) }
 
+pub type PlayerID = u64;
+pub type Port = u16;
+
+pub type PlayerPosition = (f32, f32, f32);
+
+#[derive(PartialEq, Eq)]
+pub enum GameMode {
+    Singleplayer,
+    JoinServer(SocketAddr),
+    Server(SocketAddr),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ToClientPacket {
+    Ping,
+    VoxEv(VoxelEvent<BlockID, i32>),
+    UpdatePlayer(PlayerID, PlayerPosition),
+    Kick,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ToServerPacket {
+    Ping,
+    VoxEv(VoxelEvent<BlockID, i32>),
+    UpdateMyPosition(PlayerPosition),
+    Disconnect,
+}
+
+#[derive(Clone)]
+pub struct PlayerClient {
+    pub pos : PlayerPosition,
+    pub client_ip : SocketAddr,
+    pub send_to : Sender<ToClientPacket>,
+    pub recv_from : Receiver<ToServerPacket>,
+}
+
+pub fn server_to_client_step(stream : TcpStream, to_client : Receiver<ToClientPacket>, to_server : Sender<ToServerPacket>) {
+    stream.set_read_timeout(None);
+    stream.set_nonblocking(true);
+    thread::spawn(move || {
+        let mut keep_connection = true;
+        let client_addr = stream.peer_addr().unwrap();
+        while keep_connection {
+            //Send out packets we just got from the client.
+            match deserialize_from::<TcpStream, ToServerPacket>(stream.try_clone().unwrap()) {
+                Ok(packet) => {
+                    match packet {
+                        ToServerPacket::Disconnect => {
+                            keep_connection = false;
+                            info!("Client with address {} sent disconnect packet.", client_addr);
+                        },
+                        _ => {},
+                    }
+                    match to_server.send(packet) {
+                        Ok(()) => {},
+                        Err(_) => error!("Error sending packet out of connection thread for client {}", client_addr),
+                    }
+                },
+                Err(error) => {
+                    error!("An error occurred: {} \n Terminating connection with {}", error, client_addr);
+                    keep_connection = false;
+                },
+            }
+            for packet in to_client.try_iter() {
+                match serialize_into::<TcpStream, ToClientPacket>(stream.try_clone().unwrap(), &packet) {
+                    Ok(()) => {
+                        match packet {
+                            ToClientPacket::Kick => {
+                                keep_connection = false;
+                                info!("Kicked client with address {}", client_addr);   
+                            },
+                            _ => {},
+                        }
+                    },
+                    Err(error) => {
+                        error!("An error occurred: {} \n Terminating connection with {}", error, client_addr);
+                        keep_connection = false;
+                    },
+                }
+            }
+            thread::sleep_ms(5); // Don't saturate our poor poor CPU by checking for packets constantly.
+        }
+        //We no longer need this stream, shut it down.
+        stream.shutdown(std::net::Shutdown::Both).unwrap();
+    });
+}
+
+//This is intended to be used in its own thread. 
+pub fn accept_clients(our_address: SocketAddr, new_client_channel: Sender<PlayerClient>) {
+    let listener = TcpListener::bind(our_address).expect("Unable to bind a TCP listener for our server");
+    info!("Server listening on port {}", our_address.port());
+    loop {
+        match listener.accept() {
+            Ok(stream_tuple) => {
+                let (server_to_client_send, server_to_client_receive) = unbounded::<ToClientPacket>();
+                let (client_to_server_send, client_to_server_receive) = unbounded::<ToServerPacket>();
+                
+                let (stream, ip) = stream_tuple;
+                let mut player = PlayerClient{ pos : (0.0, 0.0, 0.0), 
+                                            client_ip : ip,
+                                            send_to: server_to_client_send, 
+                                            recv_from: client_to_server_receive};
+                server_to_client_step(stream.try_clone().unwrap(), server_to_client_receive.clone(), client_to_server_send.clone());
+                match new_client_channel.send(player) {
+                    Ok(()) => {},
+                    Err(_) => error!("Could not send new player connection out of listener thread for {}", ip),
+                }
+            }, 
+            Err(error) => error!("Got an error while trying to accept a client connection: {}", error),
+        }
+    }
+    drop(listener);
+}
+
 /// Main type for the game. `Game::new().run()` runs the game.
 pub struct Client {
     events_loop: EventsLoop,
@@ -73,33 +195,40 @@ pub struct Client {
     chunk_meshes: HashMap<VoxelPos<i32>, Mesh>,
     voxel_event_sender : Sender<VoxelEvent<BlockID, i32>>,
     voxel_event_receiver : Receiver<VoxelEvent<BlockID, i32>>,
+    server_stream : Option<TcpStream>,
 }
 
 /// Main type for the game. `Game::new().run()` runs the game.
 pub struct Game {
     c: Option<Client>,
-    server_mode: bool,
+    mode: GameMode,
     dimension_registry: DimensionRegistry,
-    players: Vec<(PlayerID, Point3<f32>)>,
+    players: Vec<PlayerClient>,
     event_bus: SimpleEventBus<VoxelEvent<BlockID, i32>>,
     voxel_event_sender : Sender<VoxelEvent<BlockID, i32>>,
     voxel_event_receiver : Receiver<VoxelEvent<BlockID, i32>>,
     current_server_tick : u64,
+    new_players : Receiver<PlayerClient>,
 }
 
 impl Game {
     /// Creates a new `Game`.
-    pub fn new(server_mode : bool) -> Game {
+    pub fn new(mode : GameMode) -> Game {
         let mut dimension_registry = DimensionRegistry::new();
         let dimension = Dimension::new();
         dimension_registry.dimensions.insert(0, dimension);
         let mut bus : SimpleEventBus<VoxelEvent<BlockID, i32>> = SimpleEventBus::new();
-
-
+        
         let sender = bus.get_sender();
         let (receiver, _) = bus.subscribe(); // We don't need the ID since we're never going to remove this channel until the game terminates.
-
-        if !server_mode {
+        
+        let is_server = match mode {
+            GameMode::Server(_) => true,
+            _ => false,
+        };
+        
+        if !is_server {
+            // We are singleplayer or joining a server, 
             let instance = Instance::new(None, &::vulkano_win::required_extensions(), None).expect("failed to create instance");
             let events_loop = EventsLoop::new();
             let surface = WindowBuilder::new().build_vk_surface(&events_loop, instance.clone()).unwrap();
@@ -115,10 +244,24 @@ impl Game {
 
             let pending_meshes = Vec::new();
             let chunk_meshes = HashMap::new();
-            
+
             let voxel_event_sender = sender.clone();
             let (voxel_event_receiver, _) = bus.subscribe(); // We don't need the ID since we're never going to remove this channel until the game terminates.
             surface.window().hide_cursor(true);
+
+            let server_stream = match mode { 
+                GameMode::JoinServer(ip) => {
+                    info!("Attempting to join server at {}", ip);
+                    match TcpStream::connect(ip) {
+                        Ok(stream) => Some(stream),
+                        Err(error) => { error!("Unable to connect to server: {}", error); None },
+                    }
+                },
+                _ => None,
+            };
+            
+            // Dummy bus for non-servers.
+            let (_, dummy_new_players) = unbounded::<PlayerClient>();
             return Game {
                 c : Some(Client {
                     events_loop,
@@ -131,27 +274,37 @@ impl Game {
                     chunk_meshes,
                     voxel_event_sender,
                     voxel_event_receiver,
+                    server_stream,
                 }),
-                server_mode : server_mode,
+                mode : mode,
                 dimension_registry: dimension_registry,
                 players : Vec::new(),
                 event_bus : bus,
                 voxel_event_sender : sender,
                 voxel_event_receiver : receiver,
                 current_server_tick : 0,
+                new_players : dummy_new_players,
             };
         }
         else { 
-            return Game {
-                c : None,
-                server_mode : server_mode,
-                dimension_registry: dimension_registry,
-                players : Vec::new(),
-                event_bus : bus,
-                voxel_event_sender : sender,
-                voxel_event_receiver : receiver,
-                current_server_tick : 0,
-            };
+            let (send_new_players, recv_new_players) = unbounded::<PlayerClient>();
+            if let GameMode::Server(ip) = mode {
+                thread::spawn(move || {
+                    accept_clients(ip, send_new_players.clone());
+                });
+                return Game {
+                    c : None,
+                    mode : mode,
+                    dimension_registry: dimension_registry,
+                    players : Vec::new(),
+                    event_bus : bus,
+                    voxel_event_sender : sender,
+                    voxel_event_receiver : receiver,
+                    current_server_tick : 0,
+                    new_players : recv_new_players,
+                };
+            }
+            unreachable!();
         }
     }
 
@@ -166,15 +319,43 @@ impl Game {
             let elapsed = Instant::now() - last_tick;
             last_tick = Instant::now();
             since_tick += elapsed;
+
+            //Accept new clients, if we got any. 
+            match self.new_players.try_recv() {
+                Ok(player) => { 
+                    self.players.push(player);
+                },
+                Err(error) => error!("Error attempting to accept a new player from: {}", error),
+            }
+
             while since_tick >= TICK_LENGTH {
                 // Actually do per-tick logic:
                 {
                     // Move our Voxel Events along.
                     self.event_bus.process();
+
+                    // TODO: Any security on this.
+                    for pl in self.players.iter_mut() {
+                        for event in pl.recv_from.try_iter().collect::<Vec<ToServerPacket>>() {
+                            match event {
+                                ToServerPacket::VoxEv(vev) => match self.dimension_registry.get_mut(0).unwrap().apply_event(vev.clone()) {
+                                    Ok(_) => {},
+                                    Err(error) => error!("Encountered an error while attempting to apply voxel event {} from client {}", error, pl.client_ip),
+                                },
+                                _ => {}, // Todo: anything like this.
+                            }
+                        }
+                    }
+
                     for event in self.voxel_event_receiver.try_iter().collect::<Vec<VoxelEvent<BlockID, i32>>>(){
-                        println!("Got event: {:?}", event); 
-                        match self.dimension_registry.get_mut(0).unwrap().apply_event(event) {
-                            Ok(_) => {},
+                        trace!("Got event: {:?}", event); 
+                        match self.dimension_registry.get_mut(0).unwrap().apply_event(event.clone()) {
+                            Ok(_) => {
+                                // We have succeeded in applying this event to our world, so it's valid. Tell the players about it.
+                                for pl in self.players.iter() { 
+                                    pl.send_to.send(ToClientPacket::VoxEv(event.clone()));
+                                }
+                            },
                             Err(error) => error!("Encountered an error while attempting to apply a voxel event: {}", error),
                         }
                     }
@@ -185,7 +366,7 @@ impl Game {
                         self.dimension_registry.get_mut(0).unwrap().load_unload_chunks_clientside(client.player.position.clone());
                         self.c = Some(client); // Take ownership again
                     } else {
-                        let player_positions = self.players.iter().map(|(_, pos)| { *pos }).collect();
+                        let player_positions = self.players.iter().map(|player| { player.pos.into() }).collect();
                         self.dimension_registry.get_mut(0).unwrap().load_unload_chunks_serverside(player_positions);
                     }
                 }
@@ -239,7 +420,6 @@ impl Client {
 
         let winpos = self.surface.window().get_inner_size().unwrap();
         self.surface.window().set_cursor_position(winit::dpi::LogicalPosition::new(winpos.width * 0.5, winpos.height * 0.5))?;
-
         for ev in events {
             match ev {
                 Event::WindowEvent { event, .. } => {
@@ -283,7 +463,15 @@ impl Client {
                                         Ok(voxel) => {
                                             // Is it not air?
                                             if(voxel != 0) {
-                                                self.voxel_event_sender.try_send(VoxelEvent::SetOne(OneVoxelChange{ new_value : 0, pos : raycast.pos}))?;
+                                                let event = VoxelEvent::SetOne(OneVoxelChange{ new_value : 0, pos : raycast.pos});
+                                                self.voxel_event_sender.try_send(event.clone())?;
+                                                match self.server_stream {
+                                                   Some(ref stream) => {
+                                                       serialize_into::<TcpStream, ToServerPacket>(stream.try_clone().unwrap(), 
+                                                                                                    &ToServerPacket::VoxEv(event));
+                                                   },
+                                                   None => {},
+                                                }
                                                 continue_raycast = false;
                                             }
                                         },
@@ -334,7 +522,15 @@ impl Client {
                                             // Is it not air?
                                             if(voxel != 0) {
                                                 let adjacent_pos = raycast.pos.get_neighbor(raycast.get_last_direction().opposite());
-                                                self.voxel_event_sender.try_send(VoxelEvent::SetOne(OneVoxelChange{ new_value : self.player.selected_block, pos : adjacent_pos}))?;
+                                                let event = VoxelEvent::SetOne(OneVoxelChange{ new_value : self.player.selected_block, pos : adjacent_pos});
+                                                self.voxel_event_sender.try_send(event.clone())?;
+                                                match self.server_stream {
+                                                   Some(ref stream) => {
+                                                       serialize_into::<TcpStream, ToServerPacket>(stream.try_clone().unwrap(), 
+                                                                                                    &ToServerPacket::VoxEv(event));
+                                                   },
+                                                   None => {},
+                                                }
                                                 continue_raycast = false;
                                             }
                                         },
@@ -426,7 +622,7 @@ impl Client {
             match poll_pending_mesh(pending_mesh.clone()) {
                 Some(mesh) => { //Mesh is done! Remove it from this list.
                     new_meshes.push((*pos, mesh));
-                    trace!("Chunk mesh at ({}, {}, {}) took {} milliseconds to generate.", pos.x, pos.y, pos.z, time.elapsed().as_millis());
+                    //trace!("Chunk mesh at ({}, {}, {}) took {} milliseconds to generate.", pos.x, pos.y, pos.z, time.elapsed().as_millis());
                     false
                 }
                 None => true, //Not done yet, keep this around to poll again next time.
