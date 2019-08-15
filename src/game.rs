@@ -209,6 +209,7 @@ pub struct Game {
     voxel_event_receiver : Receiver<VoxelEvent<BlockID, i32>>,
     current_server_tick : u64,
     new_players : Receiver<PlayerClient>,
+    event_history : Vec<VoxelEvent<BlockID, i32>>,
 }
 
 impl Game {
@@ -284,6 +285,7 @@ impl Game {
                 voxel_event_receiver : receiver,
                 current_server_tick : 0,
                 new_players : dummy_new_players,
+                event_history : Vec::new(),
             };
         }
         else { 
@@ -302,6 +304,7 @@ impl Game {
                     voxel_event_receiver : receiver,
                     current_server_tick : 0,
                     new_players : recv_new_players,
+                    event_history : Vec::new(),
                 };
             }
             unreachable!();
@@ -315,43 +318,52 @@ impl Game {
         const TICK_LENGTH : Duration =  Duration::from_millis(50); //Length of a single tick in milliseconds
         let mut since_tick = Duration::new(0,0);
         let mut last_tick = Instant::now();
+        
         while running {
             let elapsed = Instant::now() - last_tick;
             last_tick = Instant::now();
             since_tick += elapsed;
-
-            //Accept new clients, if we got any. 
-            match self.new_players.try_recv() {
-                Ok(player) => { 
-                    self.players.push(player);
-                },
-                Err(error) => error!("Error attempting to accept a new player from: {}", error),
+            
+            if self.c.is_none() {
+                //Accept new clients, if we got any. 
+                match self.new_players.try_recv() {
+                    Ok(player) => { 
+                        // New player! Tell them what we've done so far. 
+                        for event in self.event_history.iter() {
+                            player.send_to.send(ToClientPacket::VoxEv(event.clone()));
+                        }
+                        self.players.push(player);
+                    },
+                    Err(error) => {}, //Suppress console spam from constantly checking for players who aren't there.
+                }
             }
 
             while since_tick >= TICK_LENGTH {
                 // Actually do per-tick logic:
                 {
-                    // Move our Voxel Events along.
-                    self.event_bus.process();
 
                     // TODO: Any security on this.
                     for pl in self.players.iter_mut() {
                         for event in pl.recv_from.try_iter().collect::<Vec<ToServerPacket>>() {
                             match event {
-                                ToServerPacket::VoxEv(vev) => match self.dimension_registry.get_mut(0).unwrap().apply_event(vev.clone()) {
+                                ToServerPacket::VoxEv(vev) => match self.event_bus.push(vev) {
                                     Ok(_) => {},
-                                    Err(error) => error!("Encountered an error while attempting to apply voxel event {} from client {}", error, pl.client_ip),
-                                },
+                                    Err(error) => {},
+                                }
                                 _ => {}, // Todo: anything like this.
                             }
                         }
                     }
 
+                    // Move our Voxel Events along.
+                    self.event_bus.process();
+                    
                     for event in self.voxel_event_receiver.try_iter().collect::<Vec<VoxelEvent<BlockID, i32>>>(){
                         trace!("Got event: {:?}", event); 
                         match self.dimension_registry.get_mut(0).unwrap().apply_event(event.clone()) {
                             Ok(_) => {
-                                // We have succeeded in applying this event to our world, so it's valid. Tell the players about it.
+                                // We have succeeded in applying this event to our world, so it's valid. Record it, tell the players about it.
+                                self.event_history.push(event.clone());
                                 for pl in self.players.iter() { 
                                     pl.send_to.send(ToClientPacket::VoxEv(event.clone()));
                                 }
