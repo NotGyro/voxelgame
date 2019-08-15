@@ -167,6 +167,7 @@ pub fn accept_clients(our_address: SocketAddr, new_client_channel: Sender<Player
                 let (client_to_server_send, client_to_server_receive) = unbounded::<ToServerPacket>();
                 
                 let (stream, ip) = stream_tuple;
+                info!("Client connecting from {}", ip);
                 let mut player = PlayerClient{ pos : (0.0, 0.0, 0.0), 
                                             client_ip : ip,
                                             send_to: server_to_client_send, 
@@ -179,6 +180,7 @@ pub fn accept_clients(our_address: SocketAddr, new_client_channel: Sender<Player
             }, 
             Err(error) => error!("Got an error while trying to accept a client connection: {}", error),
         }
+        thread::sleep_ms(10); // Don't saturate our poor poor CPU by checking for packets constantly.
     }
     drop(listener);
 }

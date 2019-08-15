@@ -54,7 +54,7 @@ fn main() {
 
     let server_mode : bool = matches.is_present("server");
 
-    let join_ip = matches.value_of("INPUT");
+    let join_ip = matches.value_of("join");
     if join_ip.is_some() && server_mode {
         println!("Cannot host a server that also joins a server.");
         return;
@@ -63,6 +63,7 @@ fn main() {
     if server_mode {
         mode = game::GameMode::Server("127.0.0.1:17242".parse().unwrap());
     } else if join_ip.is_some() { 
+        println!("Launching to join a server at {}", join_ip.unwrap());
         mode = game::GameMode::JoinServer(SocketAddr::new(join_ip.unwrap().parse().unwrap(), 17242));
     }
 
