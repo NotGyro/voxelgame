@@ -44,9 +44,9 @@ lazy_static! {
     pub static ref GAME_LOGGER_STATE : Mutex<GameLoggerState> = {
         let (s, r) = unbounded();
         Mutex::new(GameLoggerState { 
-            filter_print : LevelFilter::max(),  
-            filter_to_file : LevelFilter::max(),
-            filter_game_console : LevelFilter::max(),
+            filter_print : LevelFilter::Debug,  
+            filter_to_file : LevelFilter::Debug,
+            filter_game_console : LevelFilter::Debug,
             console_sender : s, 
             console_receiver : r,
             current_tick : 0,

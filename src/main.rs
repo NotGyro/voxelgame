@@ -16,6 +16,7 @@ extern crate string_cache;
 extern crate linear_map;
 extern crate crossbeam;
 extern crate serde;
+extern crate serde_json;
 
 #[macro_use] mod voxel;
 
@@ -34,10 +35,12 @@ mod shader;
 mod util;
 mod vulkano_win;
 mod world;
+mod network;
+mod entity;
 
 extern crate clap;
 use clap::{Arg, App};
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 
 fn main() {
     let matches = App::new("Gestalt Engine").arg(Arg::with_name("server")
@@ -48,7 +51,7 @@ fn main() {
                                 .short("j")
                                 .long("join")
                                 .value_name("IP")
-                                .help("Joins a server at the selected IP address.")
+                                .help("Joins a server at the selected IP address and socket.")
                                 .takes_value(true))
                                 .get_matches();
 
@@ -61,10 +64,10 @@ fn main() {
     }
     let mut mode = game::GameMode::Singleplayer;
     if server_mode {
-        mode = game::GameMode::Server("158.69.195.123:8400".parse().unwrap());
+        mode = game::GameMode::Server("127.0.0.1:8400".parse().unwrap());
     } else if join_ip.is_some() { 
         println!("Launching to join a server at {}", join_ip.unwrap());
-        mode = game::GameMode::JoinServer(SocketAddr::new(join_ip.unwrap().parse().unwrap(), 8400));
+        mode = game::GameMode::JoinServer(join_ip.unwrap().parse().unwrap());
     }
 
     match util::logger::init_logger() {

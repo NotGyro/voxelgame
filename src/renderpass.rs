@@ -60,7 +60,7 @@ unsafe impl RenderPassDesc for RenderPassClearedColorWithDepth {
 
 
 unsafe impl RenderPassDescClearValues<Vec<ClearValue>> for RenderPassClearedColorWithDepth {
-    fn convert_clear_values(&self, values: Vec<ClearValue>) -> Box<Iterator<Item = ClearValue>> {
+    fn convert_clear_values(&self, values: Vec<ClearValue>) -> Box<dyn Iterator<Item = ClearValue>> {
         // FIXME: safety checks
         Box::new(values.into_iter())
     }
@@ -121,7 +121,7 @@ unsafe impl RenderPassDesc for RenderPassUnclearedColorWithDepth {
 
 
 unsafe impl RenderPassDescClearValues<Vec<ClearValue>> for RenderPassUnclearedColorWithDepth {
-    fn convert_clear_values(&self, values: Vec<ClearValue>) -> Box<Iterator<Item = ClearValue>> {
+    fn convert_clear_values(&self, values: Vec<ClearValue>) -> Box<dyn Iterator<Item = ClearValue>> {
         // FIXME: safety checks
         Box::new(values.into_iter())
     }

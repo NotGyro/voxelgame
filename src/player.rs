@@ -8,7 +8,7 @@ use cgmath::{Point3, Vector3, Quaternion, Matrix4, Euler, Deg, InnerSpace};
 use cgmath::Transform as CgmathTransform;
 
 /// Struct representing the player.
-pub struct Player {
+pub struct PlayerController {
     /// Player's position in space.
     pub position: Point3<f32>,
     /// Camera the player is looking through.
@@ -24,10 +24,10 @@ pub struct Player {
 }
 
 
-impl Player {
+impl PlayerController {
     /// Creates a new player.
-    pub fn new() -> Player {
-        Player {
+    pub fn new() -> Self {
+        PlayerController {
             position: Point3::new(0.0, 0.0, 0.0),
             camera: Camera::new(),
             pitch: 0.0,

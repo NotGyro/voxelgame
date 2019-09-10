@@ -9,8 +9,7 @@ use std::result::Result;
 use serde::{Serialize, Deserialize};
 
 use voxel::voxelmath::*;
-use voxel::voxelstorage::VoxelStorage;
-use voxel::voxelstorage::Voxel;
+use voxel::voxelstorage::{VoxelStorage, Voxel, VoxelError};
 #[cfg(test)]
 use voxel::voxelarray::VoxelArray;
 
@@ -34,7 +33,7 @@ impl Error for EventApplyError {
     }
 }
 */
-pub type EventApplyResult = Result<(), Box<Error>>;
+pub type EventApplyResult = Result<(), VoxelError>;
 
 /// Represents a change to the contents of a Voxel Storage.
 /// Type arguments are voxel type, position type. This is the version of this trait
@@ -43,7 +42,7 @@ pub trait VoxelEventInner <T, P> : VoxelEventBounds where T : VoxelEventVoxelBou
     /// Applies a voxel event to a VoxelStorage.
     /// The intended use of this is as a default case, and ideally specific 
     /// VoxelStorage implementations could provide better-optimized 
-    fn apply_blind(&self, stor : &mut VoxelStorage<T, P>) -> EventApplyResult;
+    fn apply_blind(&self, stor : &mut dyn VoxelStorage<T, P>) -> EventApplyResult;
 }
 
 /*
@@ -69,14 +68,14 @@ pub struct SetVoxelRange<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPo
 }
 
 impl <T, P> VoxelEventInner<T, P> for OneVoxelChange<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds {
-    fn apply_blind(&self, stor : &mut VoxelStorage<T, P>) -> EventApplyResult {
+    fn apply_blind(&self, stor : &mut dyn VoxelStorage<T, P>) -> EventApplyResult {
         stor.set(self.pos, self.new_value.clone())?;
         Ok(()) // TODO: modify VoxelStorage's "Set" method to return errors rather than silently fail
     }
 }
 
 impl <T, P> VoxelEventInner<T, P> for SetVoxelRange<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds {
-    fn apply_blind(&self, stor : &mut VoxelStorage<T, P>) -> EventApplyResult {
+    fn apply_blind(&self, stor : &mut dyn VoxelStorage<T, P>) -> EventApplyResult {
         for pos in self.range {
             stor.set(pos, self.new_value.clone())?; 
         }
@@ -92,7 +91,7 @@ pub enum VoxelEvent<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBoun
 }
 
 impl <T, P> VoxelEventInner<T, P> for VoxelEvent<T, P> where T : VoxelEventVoxelBounds, P : VoxelEventPosBounds {
-    fn apply_blind(&self, stor : &mut VoxelStorage<T, P>) -> EventApplyResult {
+    fn apply_blind(&self, stor : &mut dyn VoxelStorage<T, P>) -> EventApplyResult {
         match self { 
             VoxelEvent::SetOne(evt) => evt.apply_blind(stor),
             VoxelEvent::SetRange(evt) => evt.apply_blind(stor),
@@ -120,7 +119,7 @@ const OURSIZE : usize = (CHUNK_X_LENGTH * CHUNK_Y_LENGTH * CHUNK_Z_LENGTH) as us
 
 #[test]
 fn test_apply_voxel_event() { 
-    let mut array : Vec<String> = vec!["Hello!".to_string(); OURSIZE];
+    let array : Vec<String> = vec!["Hello!".to_string(); OURSIZE];
     let mut storage : VoxelArray<String, u32> = VoxelArray::load_new(CHUNK_X_LENGTH, CHUNK_Y_LENGTH, CHUNK_Z_LENGTH, array);
     let evt : OneVoxelChange<String, u32> = OneVoxelChange{ new_value : "World!".to_string(), pos : VoxelPos { x: 7, y: 7, z:7}}; 
     evt.apply_blind(&mut storage).unwrap();

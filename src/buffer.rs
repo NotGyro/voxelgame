@@ -299,12 +299,12 @@ unsafe impl<T: ?Sized, A> BufferAccess for CpuAccessibleBufferAutoPool<T, A>
     }
 
     #[inline]
-    fn conflicts_buffer(&self, other: &BufferAccess) -> bool {
+    fn conflicts_buffer(&self, other: &dyn BufferAccess) -> bool {
         self.conflict_key() == other.conflict_key() // TODO:
     }
 
     #[inline]
-    fn conflicts_image(&self, _other: &ImageAccess) -> bool {
+    fn conflicts_image(&self, _other: &dyn ImageAccess) -> bool {
         false
     }
 

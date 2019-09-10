@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use cgmath::{Point3, MetricSpace};
 use world::generators::{WorldGenerator, PerlinGenerator};
 use voxel::voxelstorage::*;
-use voxel::voxelarray::*;
 use voxel::voxelmath::*;
 use world::block::{BlockID, Chunk};
 
@@ -84,7 +83,7 @@ fn test_chunkpos() {
 }
 
 impl VoxelStorage<BlockID, i32> for Dimension {
-    fn get(&self, coord: VoxelPos<i32>) -> Result<BlockID, Box<Error>>{
+    fn get(&self, coord: VoxelPos<i32>) -> Result<BlockID, VoxelError>{
         let size = self.chunk_size.clone();
         let chunkpos = blockpos_to_chunk(coord, size);
         // Do we have a chunk that would contain this block position?
@@ -94,7 +93,8 @@ impl VoxelStorage<BlockID, i32> for Dimension {
                 let bounds = chunk_entry.bounds.clone();
                 let chunk_size = bounds.get_size_unsigned();
                 if chunk_size != size {
-                    return Err(Box::new(ChunkedVoxelError::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds)));
+                    return Err(VoxelError::Other(
+                        Box::new(ChunkedVoxelError::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds))));
                 }
                 match bounds.get_local_unsigned(coord) {
                     Some(pos) => {
@@ -103,14 +103,15 @@ impl VoxelStorage<BlockID, i32> for Dimension {
                         return Ok(locked.get(vpos!(pos.x as u8, pos.y as u8, pos.z as u8))?);
                     },
                     // Position is not inside our chunk's bounds.
-                    None => return Err(Box::new(ChunkedVoxelError::<i32, u32>::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds))),
+                    None => return Err(VoxelError::Other(
+                        Box::new(ChunkedVoxelError::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds)))),
                 }
             },
             // Chunk not currently loaded or generated.
-            None => return Err(Box::new(ChunkedVoxelError::<i32, u32>::NotLoaded(chunkpos,coord))),
+            None => return Err(VoxelError::NotYetLoaded(format!("{}", coord))),
         }
     }
-    fn set(&mut self, coord: VoxelPos<i32>, value: BlockID) -> Result<(), Box<Error>>{
+    fn set(&mut self, coord: VoxelPos<i32>, value: BlockID) -> Result<(), VoxelError>{
         let size = self.chunk_size.clone();
         // Do we have a chunk that would contain this block position?
         let chunkpos = blockpos_to_chunk(coord, size);
@@ -120,7 +121,8 @@ impl VoxelStorage<BlockID, i32> for Dimension {
                 let bounds = chunk_entry.bounds.clone();
                 let chunk_size = bounds.get_size_unsigned();
                 if chunk_size != size {
-                    return Err(Box::new(ChunkedVoxelError::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds)));
+                    return Err(VoxelError::Other(
+                        Box::new(ChunkedVoxelError::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds))));
                 }
                 match bounds.get_local_unsigned(coord) {
                     Some(pos) => {
@@ -134,11 +136,12 @@ impl VoxelStorage<BlockID, i32> for Dimension {
                         }
                     },
                     // Position is not inside our chunk's bounds.
-                    None => return Err(Box::new(ChunkedVoxelError::<i32, u32>::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds))),
+                    None => return Err(VoxelError::Other(
+                        Box::new(ChunkedVoxelError::ChunkBoundsInvalid(coord, chunkpos, size, chunk_size, bounds)))),
                 }
             },
             // Chunk not currently loaded or generated.
-            None => return Err(Box::new(ChunkedVoxelError::<i32, u32>::NotLoaded(chunkpos,coord))),
+            None => return Err(VoxelError::NotYetLoaded(format!("{}", coord))),
         }
         Ok(())
     }
@@ -197,7 +200,7 @@ impl Dimension {
                         let mut range = VoxelRange{lower: chunk_origin, 
                                 upper : chunk_origin + vpos!(self.chunk_size.x as i32, self.chunk_size.y as i32, self.chunk_size.z as i32)};
                         range.validate();
-                        let mut chunk = gen.generate(range.clone(), 0);
+                        let chunk = gen.generate(range.clone(), 0);
                         self.chunks.insert(chunk_pos, Arc::new(
                             ChunkEntry { 
                                 data: RwLock::new(chunk),
@@ -252,7 +255,7 @@ impl Dimension {
                             let mut range = VoxelRange{lower: chunk_origin, 
                                     upper : chunk_origin + vpos!(self.chunk_size.x as i32, self.chunk_size.y as i32, self.chunk_size.z as i32)};
                             range.validate();
-                            let mut chunk = gen.generate(range.clone(), 0);
+                            let chunk = gen.generate(range.clone(), 0);
                             self.chunks.insert(chunk_pos, Arc::new(
                                 ChunkEntry { 
                                     data: RwLock::new(chunk),

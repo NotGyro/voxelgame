@@ -128,8 +128,8 @@ impl <S, U> ToSigned<S> for U where S : ToUnsigned<U>, U : Clone {
     }
 }
 
-pub trait VoxelCoord : Copy + Integer + fmt::Display + fmt::Debug {}
-impl<T> VoxelCoord for T where T : Copy + Integer + fmt::Display + fmt::Debug {}
+pub trait VoxelCoord : 'static + Copy + Integer + fmt::Display + fmt::Debug {}
+impl<T> VoxelCoord for T where T : 'static + Copy + Integer + fmt::Display + fmt::Debug {}
 
 /// A point in Voxel space. (A cell.)
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -658,7 +658,7 @@ impl Error for UnsignedUnderflowError {
         "Tried to subtract from unsigned integer which is 0."
     }
 
-    fn cause(&self) -> Option<&Error> { None }
+    fn cause(&self) -> Option<&dyn Error> { None }
 }
 
 

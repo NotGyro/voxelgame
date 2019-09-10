@@ -23,7 +23,7 @@ impl fmt::Display for SimpleError {
     }
 }
 impl Error for SimpleError {
-    fn source(&self) -> Option<&(Error + 'static)> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
         // Generic error, underlying cause isn't tracked.
         None
     }
@@ -43,7 +43,7 @@ pub trait EventBus <T> where T : Event {
     /// Drops our Sender to the specified channel, stops trying to send events there.
     fn unsubscribe(&mut self, id : usize);
     /// Pushes an event directly onto this Event Bus if you're the one who owns it.
-    fn push(&mut self, ev : T) -> Result<(), Box<Error>>;
+    fn push(&mut self, ev : T) -> Result<(), Box<dyn Error>>;
 }
 
 
@@ -76,7 +76,7 @@ impl <T> EventBus<T> for SimpleEventBus<T> where T : Event {
     /// Drops our Sender to the specified channel, stops trying to send events there.
     fn unsubscribe(&mut self, id : usize) { self.consumers.remove(&id); }
     /// Pushes an event directly onto this Event Bus if you're the one who owns it.
-    fn push(&mut self, ev : T) -> Result<(), Box<Error>> { 
+    fn push(&mut self, ev : T) -> Result<(), Box<dyn Error>> { 
         match self.sender_template.send(ev) {
             Ok(()) => Ok(()),
             Err(error) => Err(Box::new(SimpleError { value: format!("{:?}", error)})),
@@ -139,7 +139,7 @@ impl <T> EventBus<T> for EventJournalBus<T> where T : Event {
     /// Drops our Sender to the specified channel, stops trying to send events there.
     fn unsubscribe(&mut self, id : usize) { self.bus.unsubscribe(id) }
     /// Pushes an event directly onto this Event Bus if you're the one who owns it.
-    fn push(&mut self, ev : T) -> Result<(), Box<Error>> { self.bus.push(ev)?; Ok(()) }
+    fn push(&mut self, ev : T) -> Result<(), Box<dyn Error>> { self.bus.push(ev)?; Ok(()) }
 }
 impl <T> EventJournalBus<T> where T : Event { 
     fn new() -> EventJournalBus<T> { 
@@ -167,7 +167,7 @@ struct TestEvent {
 #[test]
 fn try_event_journal_bus() { 
     let mut bus : EventJournalBus<TestEvent> = EventJournalBus::new();
-    let (mut subscriber1, _) = bus.subscribe();
+    let (subscriber1, _) = bus.subscribe();
     let mut subscribers : Vec<Receiver<TestEvent>> = Vec::new(); 
 
     let ev1 = TestEvent{ name : "Voksa".to_string(), apples : 14 };
@@ -175,7 +175,7 @@ fn try_event_journal_bus() {
     let ev3 = TestEvent{ name : "byte".to_string(), apples: 7 };
 
     for _ in 0..10 {
-        let (mut s, _) = bus.subscribe();
+        let (s, _) = bus.subscribe();
         subscribers.push(s);
     }
     let snd = bus.get_sender();
