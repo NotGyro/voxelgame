@@ -177,13 +177,13 @@ impl Server {
     }
     pub fn set_ready(&mut self, val : bool) { self.ready = val }
 
-    pub fn send_to_client(&self, player_id: &Identity, packet: ToClientPacket) -> Result<(), Box<dyn Error>> {
-        if let Some((_, stream)) = self.clients.get(player_id) {
-            Self::send_packet(&mut stream.try_clone().unwrap(), packet)?;
+    pub fn send_to_client(&self, packet: QualifiedToClientPacket) -> Result<(), Box<dyn Error>> {
+        if let Some((_, stream)) = self.clients.get(&packet.client_id) {
+            Self::send_packet(&mut stream.try_clone().unwrap(), packet.pak)?;
             Ok(())
         }
         else {
-            Err(Box::new(NoClientError::new(player_id.clone())))
+            Err(Box::new(NoClientError::new(packet.client_id.clone())))
         }
     }
     pub fn queue_broadcast(&mut self, packet: QualifiedToClientPacket) {
@@ -191,18 +191,23 @@ impl Server {
     }
 
     fn read_incoming_packet(stream: &mut TcpStream) -> Result<ToServerPacket, std::io::Error> {
-        //At first I toyed with conditional compilation to get this to accept any usize, 
+        //At first I toyed with conditional compilation to get this to accept any usize,
         //but then I realized - what am I doing? If we have a packet larger than 2 GB
         //something is horribly wrong. So, it's a u32 rather than a usize.
         let mut buf : [u8; 4] = [0; 4];
         stream.read_exact(&mut buf)?;
         let msg_len = u32::from_le_bytes(buf);
+        //If we already got a packet size, we should finish and read the rest of the packet.
+        stream.set_nonblocking(false)?;
+        debug!("Receiving packet of size {} from {:?}", msg_len, stream.peer_addr());
 
         let mut buf : Vec<u8> = vec![0; msg_len as usize];
         stream.read_exact(&mut buf)?;
 
         let text = std::str::from_utf8(buf.as_slice()).unwrap();
-        debug!("Received {} from {:?}", text, stream.peer_addr());
+
+        stream.set_nonblocking(true)?; //Set back to nonblocking mode for the listen process.
+
         Ok(serde_json::from_str::<ToServerPacket>(text)?)
     }
 
@@ -279,7 +284,7 @@ impl Server {
                 },
                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => { /* Nothing to read right now, check again later. */ },
                 Err(e) => { 
-                    error!("Encountered IO while attempting to read from a client stream: {}", e);
+                    error!("Encountered IO while  from a client stream: {}", e);
                     return Err(Box::new(e));
                 },
             };
@@ -312,11 +317,11 @@ impl Server {
 }
 
 //We only get one of these upon connecting
-struct _ClientInner { 
+struct _ClientInner {
     stream : TcpStream,
 }
 
-pub struct Client { 
+pub struct Client {
     inner: Option<_ClientInner>,
     name: String,
     ident: Identity,
